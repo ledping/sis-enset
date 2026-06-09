@@ -47,7 +47,8 @@ export default function Memoires() {
   const [form, setForm] = useState(initialForm);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const canSubmit = ['ENSEIGNANT', 'ADMIN', 'CHEF_DEPT'].includes(user?.role);
+  const canSubmit = ['ENSEIGNANT', 'ADMIN', 'CHEF_DEPT', 'ETUDIANT'].includes(user?.role);
+  const canDelete = (memoire) => ['ADMIN', 'CHEF_DEPT'].includes(user?.role) || memoire.depose_par_id === user?.id || memoire.depose_par_detail?.id === user?.id;
 
   useEffect(() => {
     let ignore = false;
@@ -156,6 +157,19 @@ export default function Memoires() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDelete = async (memoire) => {
+    const confirmed = window.confirm(`Supprimer définitivement le mémoire « ${memoire.titre} » ? Cette action supprimera aussi ses fichiers.`);
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/memoires/${memoire.id}/`);
+      setMemoires((current) => current.filter((item) => item.id !== memoire.id));
+      setMessage('Mémoire supprimé définitivement.');
+    } catch (error) {
+      setMessage(error.response?.data?.detail || 'Suppression impossible. Vérifiez vos droits.');
+    }
+  };
+
   return (
     <div>
       <div className="page-title">
@@ -232,6 +246,11 @@ export default function Memoires() {
                     {memoire.fichier_pdf && (
                       <button className="btn btn-primary btn-sm" type="button" onClick={() => void handleDownload(memoire.id, memoire.titre)}>
                         <Download size={15} /> PDF
+                      </button>
+                    )}
+                    {canDelete(memoire) && (
+                      <button className="btn btn-outline-danger btn-sm" type="button" onClick={() => void handleDelete(memoire)}>
+                        <Trash2 size={15} /> Supprimer
                       </button>
                     )}
                   </div>

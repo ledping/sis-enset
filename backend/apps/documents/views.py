@@ -9,11 +9,22 @@ from .models import Document
 from .serializers import DocumentSerializer
 from apps.journal.models import JournalActivite, log
 from apps.users.models import ParametresValidation, Utilisateur
+from apps.notifications.models import Notification, notifier
 
 
 class CanValidateDocument(permissions.BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.role in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT])
+
+
+class CanManageDocument(permissions.BasePermission):
+    """Admin/Chef ou auteur du document peuvent modifier/supprimer la publication."""
+    def has_object_permission(self, request, view, obj):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.role in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
+            return True
+        return obj.auteur_id == request.user.id
 
 
 def document_status_by_policy(user, type_doc):
@@ -76,6 +87,11 @@ class DocumentListCreateView(generics.ListCreateAPIView):
         doc = serializer.save(statut=statut)
         suffix = 'publie automatiquement' if statut == Document.Statut.VALIDE else 'soumis pour validation'
         log(self.request.user, JournalActivite.TypeAction.DEPOT, f'Depot {suffix} : {doc.titre}', self.request.META.get('REMOTE_ADDR'))
+        if statut == Document.Statut.EN_ATTENTE:
+            validators = Utilisateur.objects.filter(role__in=[Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT], actif=True, is_active=True)
+            for validator in validators:
+                if validator != self.request.user:
+                    notifier(validator, 'Document en attente', f'Un document attend validation : {doc.titre}', Notification.TypeNotification.VALIDATION, '/validations')
 
 
 class DocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -83,12 +99,26 @@ class DocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = DocumentSerializer
     parser_classes = [MultiPartParser, FormParser]
 
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [permissions.IsAuthenticated(), CanManageDocument()]
+        return [permissions.IsAuthenticated()]
+
     def retrieve(self, request, *args, **kwargs):
         doc = self.get_object()
         doc.nb_consultations += 1
         doc.save(update_fields=['nb_consultations'])
         log(request.user, JournalActivite.TypeAction.CONSULTATION, f'Consultation : {doc.titre}', request.META.get('REMOTE_ADDR'))
         return super().retrieve(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        doc = self.get_object()
+        titre = doc.titre
+        if doc.fichier:
+            doc.fichier.delete(save=False)
+        response = super().destroy(request, *args, **kwargs)
+        log(request.user, JournalActivite.TypeAction.SUPPRESSION, f'Suppression definitive document : {titre}', request.META.get('REMOTE_ADDR'))
+        return response
 
 
 class DocumentValidationView(APIView):
@@ -106,6 +136,8 @@ class DocumentValidationView(APIView):
             return Response({'detail': 'Decision invalide.'}, status=status.HTTP_400_BAD_REQUEST)
         doc.save(update_fields=['statut', 'updated_at'])
         log(request.user, JournalActivite.TypeAction.VALIDATION, f'{action} : {doc.titre}', request.META.get('REMOTE_ADDR'))
+        notif_type = Notification.TypeNotification.VALIDATION if decision == 'valider' else Notification.TypeNotification.REJET
+        notifier(doc.auteur, action, f'Votre document « {doc.titre} » a ete {doc.get_statut_display().lower()}.', notif_type, '/documents')
         return Response(DocumentSerializer(doc, context={'request': request}).data)
 
 

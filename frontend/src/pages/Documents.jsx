@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, FilePlus2, Search } from 'lucide-react';
+import { Download, FilePlus2, Search, Trash2 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../contexts/useAuth';
 import Spinner from '../components/Spinner';
@@ -30,6 +30,7 @@ export default function Documents() {
   const [message, setMessage] = useState('');
 
   const canUpload = ['ENSEIGNANT', 'ADMIN', 'CHEF_DEPT'].includes(user?.role);
+  const canDelete = (doc) => ['ADMIN', 'CHEF_DEPT'].includes(user?.role) || doc.auteur_id === user?.id || doc.auteur_detail?.id === user?.id;
 
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -106,6 +107,19 @@ export default function Documents() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDelete = async (doc) => {
+    const confirmed = window.confirm(`Supprimer définitivement le document « ${doc.titre} » ? Cette action retirera aussi le fichier.`);
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/documents/${doc.id}/`);
+      setDocs((current) => current.filter((item) => item.id !== doc.id));
+      setMessage('Document supprimé définitivement.');
+    } catch (error) {
+      setMessage(error.response?.data?.detail || 'Suppression impossible. Vérifiez vos droits.');
+    }
+  };
+
   return (
     <div>
       <div className="page-title">
@@ -164,6 +178,11 @@ export default function Documents() {
                 </div>
                 <div className="card-footer bg-transparent border-0 d-flex align-items-center gap-2 px-3 pb-3">
                   <button className="btn btn-sm btn-outline-primary" onClick={() => handleDownload(doc.id, doc.titre)}><Download size={15} /> Télécharger</button>
+                  {canDelete(doc) && (
+                    <button className="btn btn-sm btn-outline-danger" type="button" onClick={() => void handleDelete(doc)}>
+                      <Trash2 size={15} /> Supprimer
+                    </button>
+                  )}
                   <span className="ms-auto text-muted small">{doc.nb_telechargements} DL</span>
                 </div>
               </div>

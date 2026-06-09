@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Download, FileText, Mail, Phone, PlayCircle, UserRound } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, BookOpen, Download, FileText, Mail, Phone, PlayCircle, Trash2, UserRound } from 'lucide-react';
 import api, { API_BASE_URL } from '../api';
+import { useAuth } from '../contexts/useAuth';
 import Spinner from '../components/Spinner';
 
 function fileUrl(path) {
@@ -15,18 +16,61 @@ function keywords(value) {
   return value.split(/[;,]/).map((item) => item.trim()).filter(Boolean);
 }
 
+function paragraphs(value) {
+  if (!value) return [];
+  return value
+    .split(/\n+|(?:^|\s)[0-9]+[).]\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function readingStats(memoire, tools, images) {
+  const checks = [
+    memoire?.resume,
+    memoire?.introduction,
+    memoire?.problematique,
+    tools.length > 0,
+    memoire?.resultats_discussion,
+    images.length > 0,
+    memoire?.support_presentation,
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
 export default function MemoireDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [memoire, setMemoire] = useState(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
+    let ignore = false;
+
     api.get(`/memoires/${id}/`)
-      .then((response) => setMemoire(response.data))
-      .catch(() => setMessage('Impossible de charger le dossier du mémoire.'))
-      .finally(() => setLoading(false));
+      .then((response) => {
+        if (!ignore) setMemoire(response.data);
+      })
+      .catch(() => {
+        if (!ignore) setMessage('Impossible de charger le dossier du mémoire.');
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, [id]);
+
+  const tools = useMemo(() => {
+    if (!memoire?.materiels_outils) return [];
+    return Array.isArray(memoire.materiels_outils) ? memoire.materiels_outils : [];
+  }, [memoire]);
+
+  const canDelete = (item) => ['ADMIN', 'CHEF_DEPT'].includes(user?.role) || item?.depose_par_id === user?.id || item?.depose_par_detail?.id === user?.id;
 
   const download = async () => {
     const response = await api.get(`/memoires/${id}/dl/`, { responseType: 'blob' });
@@ -38,10 +82,17 @@ export default function MemoireDetail() {
     URL.revokeObjectURL(url);
   };
 
-  const tools = useMemo(() => {
-    if (!memoire?.materiels_outils) return [];
-    return Array.isArray(memoire.materiels_outils) ? memoire.materiels_outils : [];
-  }, [memoire]);
+  const handleDelete = async () => {
+    const confirmed = window.confirm(`Supprimer définitivement le mémoire « ${memoire.titre} » ? Cette action retirera aussi les fichiers associés.`);
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/memoires/${id}/`);
+      navigate('/memoires', { replace: true });
+    } catch {
+      setMessage('Suppression impossible. Vérifiez vos droits.');
+    }
+  };
 
   if (loading) return <Spinner label="Chargement du dossier mémoire..." />;
   if (message) return <div className="alert alert-warning border-0 shadow-sm">{message}</div>;
@@ -49,34 +100,53 @@ export default function MemoireDetail() {
 
   const keyList = keywords(memoire.mots_cles);
   const resultImages = memoire.images_resultats_urls || [];
+  const resultParagraphs = paragraphs(memoire.resultats_discussion);
+  const articleScore = readingStats(memoire, tools, resultImages);
+  const authorPhoto = memoire.photo_auteur_url || fileUrl(memoire.photo_auteur);
   const resources = [
     { label: 'Mémoire complet corrigé', file: memoire.fichier_pdf, primary: true },
     { label: 'Support de présentation', file: memoire.support_presentation },
   ].filter((item) => item.file);
 
   return (
-    <div>
+    <div className="memoire-detail-v8">
       <div className="page-title">
         <div>
-          <h2>Résumé académique généré</h2>
-          <p>Présentation automatique du mémoire sous forme de mini-article inspiré du style IEEE.</p>
+          <Link to="/memoires" className="back-link"><ArrowLeft size={16} /> Retour à la bibliothèque</Link>
+          <h2>Article académique généré</h2>
+          <p>Présentation institutionnelle du mémoire, générée à partir des informations saisies.</p>
         </div>
-        <button className="btn btn-primary" type="button" onClick={() => void download()}>
-          <Download size={17} /> Télécharger le mémoire
-        </button>
+        <div className="d-flex flex-wrap gap-2">
+          <button className="btn btn-primary" type="button" onClick={() => void download()}>
+            <Download size={17} /> Télécharger le mémoire
+          </button>
+          {canDelete(memoire) && (
+            <button className="btn btn-outline-danger" type="button" onClick={() => void handleDelete()}>
+              <Trash2 size={17} /> Supprimer
+            </button>
+          )}
+        </div>
       </div>
 
-      <article className="ieee-article data-card">
-        <header className="ieee-header">
+      <div className="article-summary-strip">
+        <div><span>Qualité de complétude</span><strong>{articleScore}%</strong></div>
+        <div><span>Outils renseignés</span><strong>{tools.length}</strong></div>
+        <div><span>Images résultats</span><strong>{resultImages.length}/4</strong></div>
+        <div><span>Année académique</span><strong>{memoire.annee_academique}</strong></div>
+      </div>
+
+      <article className="ieee-article ieee-article-v8 data-card">
+        <header className="ieee-header article-cover">
           <div className="ieee-school">ENSET Douala · Département {memoire.departement}</div>
           <h1>{memoire.titre}</h1>
-          <div className="ieee-author-block">
+          <p className="article-subtitle">Mini-article de valorisation scientifique et technique du mémoire soutenu</p>
+          <div className="ieee-author-block author-card-v8">
             <div className="profile-photo article-photo">
-              {memoire.photo_auteur_url ? <img src={memoire.photo_auteur_url} alt={memoire.auteur_nom} /> : <UserRound size={34} />}
+              {authorPhoto ? <img src={authorPhoto} alt={memoire.auteur_nom} /> : <UserRound size={34} />}
             </div>
             <div>
               <h3>{memoire.auteur_nom}</h3>
-              <p>{memoire.niveau} · {memoire.filiere}{memoire.option ? ` · ${memoire.option}` : ''} · {memoire.annee_academique}</p>
+              <p>{memoire.niveau} · {memoire.filiere}{memoire.option ? ` · ${memoire.option}` : ''}</p>
               <p>Encadreur : <strong>{memoire.encadreur}</strong></p>
               <div className="article-contact">
                 {memoire.auteur_email && <span><Mail size={14} /> {memoire.auteur_email}</span>}
@@ -86,7 +156,7 @@ export default function MemoireDetail() {
           </div>
         </header>
 
-        <section className="ieee-abstract">
+        <section className="ieee-abstract abstract-v8">
           <h2>Abstract</h2>
           <p>{memoire.resume}</p>
           {keyList.length > 0 && (
@@ -94,7 +164,15 @@ export default function MemoireDetail() {
           )}
         </section>
 
-        <div className="ieee-columns">
+        <div className="article-navigation-card">
+          <BookOpen size={18} />
+          <div>
+            <strong>Plan de lecture</strong>
+            <span>Introduction · Problématique · Méthodologie · Résultats · Conclusion · Livrables</span>
+          </div>
+        </div>
+
+        <div className="ieee-columns article-body-v8">
           <section>
             <h2>I. Introduction</h2>
             <p>{memoire.introduction || 'Introduction non renseignée.'}</p>
@@ -108,19 +186,21 @@ export default function MemoireDetail() {
           <section className="ieee-wide">
             <h2>III. Matériels, outils et méthodes</h2>
             {tools.length > 0 ? (
-              <div className="table-responsive article-table-wrap">
+              <div className="table-responsive article-table-wrap article-table-wrap-v8">
                 <table className="table article-table align-middle">
                   <thead>
                     <tr>
+                      <th>#</th>
                       <th>Catégorie</th>
                       <th>Matériel / outil</th>
                       <th>Version</th>
-                      <th>Description / rôle</th>
+                      <th>Description / rôle dans le projet</th>
                     </tr>
                   </thead>
                   <tbody>
                     {tools.map((tool, index) => (
                       <tr key={`${tool.nom || 'outil'}-${index + 1}`}>
+                        <td><span className="tool-index">{index + 1}</span></td>
                         <td>{tool.categorie || '—'}</td>
                         <td><strong>{tool.nom || '—'}</strong></td>
                         <td>{tool.version || '—'}</td>
@@ -138,13 +218,24 @@ export default function MemoireDetail() {
 
           <section className="ieee-wide">
             <h2>IV. Résultats et discussion</h2>
-            <p>{memoire.resultats_discussion || 'Résultats non renseignés.'}</p>
+            {resultParagraphs.length > 0 ? (
+              <div className="results-grid-v8">
+                {resultParagraphs.map((result, index) => (
+                  <div className="result-card-v8" key={`${result.slice(0, 20)}-${index + 1}`}>
+                    <span>Résultat {index + 1}</span>
+                    <p>{result}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p>{memoire.resultats_discussion || 'Résultats non renseignés.'}</p>
+            )}
             {resultImages.length > 0 && (
-              <figure className={`result-mosaic result-mosaic-${Math.min(resultImages.length, 4)}`}>
+              <figure className={`result-mosaic result-mosaic-v8 result-mosaic-${Math.min(resultImages.length, 4)}`}>
                 {resultImages.slice(0, 4).map((image, index) => (
                   <img key={image} src={image} alt={`Résultat ${index + 1}`} />
                 ))}
-                <figcaption>Fig. 1. Mosaïque des résultats visuels du projet.</figcaption>
+                <figcaption>Fig. 1. Mosaïque des résultats visuels majeurs du projet.</figcaption>
               </figure>
             )}
           </section>
@@ -152,9 +243,9 @@ export default function MemoireDetail() {
           <section>
             <h2>V. Conclusion</h2>
             <p>
-              Ce travail apporte une réponse structurée à la problématique identifiée en combinant
-              conception, implémentation et validation expérimentale. Les livrables associés permettent
-              de conserver une trace exploitable du mémoire et de valoriser les résultats obtenus.
+              Ce mémoire présente une contribution structurée à la problématique étudiée. Les résultats obtenus
+              montrent l'intérêt de la solution proposée et ouvrent la voie à des améliorations futures,
+              notamment en matière d'industrialisation, d'extension fonctionnelle et de déploiement institutionnel.
             </p>
           </section>
         </div>
@@ -170,6 +261,7 @@ export default function MemoireDetail() {
                   {item.label}
                 </a>
               ))}
+              {!resources.length && <div className="empty-state compact-empty w-100">Aucun livrable disponible.</div>}
             </div>
           </div>
         </div>
