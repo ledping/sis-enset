@@ -1,0 +1,120 @@
+from django.db.models import Q
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404
+from rest_framework import filters, generics, permissions, status
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from .models import Document
+from .serializers import DocumentSerializer
+from apps.journal.models import JournalActivite, log
+from apps.users.models import ParametresValidation, Utilisateur
+
+
+class CanValidateDocument(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.role in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT])
+
+
+def document_status_by_policy(user, type_doc):
+    """Publication semi-automatique des documents selon le rôle et le type."""
+    if user.role == Utilisateur.Role.ADMIN:
+        return Document.Statut.VALIDE
+
+    params = ParametresValidation.get_solo()
+    automatic_types = set()
+    if params.publication_auto_cours:
+        automatic_types.add(Document.TypeDocument.COURS)
+    if params.publication_auto_td:
+        automatic_types.add(Document.TypeDocument.TD)
+    if params.publication_auto_tp:
+        automatic_types.add(Document.TypeDocument.TP)
+    if params.publication_auto_support:
+        automatic_types.add(Document.TypeDocument.SUPPORT)
+
+    if user.role == Utilisateur.Role.ENSEIGNANT and type_doc in automatic_types:
+        return Document.Statut.VALIDE
+
+    return Document.Statut.EN_ATTENTE
+
+
+class DocumentListCreateView(generics.ListCreateAPIView):
+    serializer_class = DocumentSerializer
+    parser_classes = [MultiPartParser, FormParser]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['titre', 'description', 'departement', 'filiere', 'auteur__first_name', 'auteur__last_name', 'auteur__username']
+    ordering_fields = ['created_at', 'titre', 'nb_telechargements']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        qs = Document.objects.select_related('auteur')
+        type_doc = self.request.query_params.get('type')
+        niveau = self.request.query_params.get('niveau')
+        annee = self.request.query_params.get('annee')
+        statut = self.request.query_params.get('statut')
+
+        if type_doc:
+            qs = qs.filter(type_doc=type_doc)
+        if niveau:
+            qs = qs.filter(niveau=niveau)
+        if annee:
+            qs = qs.filter(annee_academique=annee)
+
+        user = self.request.user
+        is_validator = user.is_authenticated and user.role in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]
+        if statut:
+            qs = qs.filter(statut=statut)
+        elif not is_validator:
+            qs = qs.filter(Q(statut=Document.Statut.VALIDE) | Q(auteur=user))
+        else:
+            qs = qs.filter(statut=Document.Statut.VALIDE)
+        return qs
+
+    def perform_create(self, serializer):
+        incoming_type = self.request.data.get('type_doc') or Document.TypeDocument.COURS
+        statut = document_status_by_policy(self.request.user, incoming_type)
+        doc = serializer.save(statut=statut)
+        suffix = 'publie automatiquement' if statut == Document.Statut.VALIDE else 'soumis pour validation'
+        log(self.request.user, JournalActivite.TypeAction.DEPOT, f'Depot {suffix} : {doc.titre}', self.request.META.get('REMOTE_ADDR'))
+
+
+class DocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Document.objects.select_related('auteur')
+    serializer_class = DocumentSerializer
+    parser_classes = [MultiPartParser, FormParser]
+
+    def retrieve(self, request, *args, **kwargs):
+        doc = self.get_object()
+        doc.nb_consultations += 1
+        doc.save(update_fields=['nb_consultations'])
+        log(request.user, JournalActivite.TypeAction.CONSULTATION, f'Consultation : {doc.titre}', request.META.get('REMOTE_ADDR'))
+        return super().retrieve(request, *args, **kwargs)
+
+
+class DocumentValidationView(APIView):
+    permission_classes = [CanValidateDocument]
+
+    def post(self, request, pk, decision):
+        doc = get_object_or_404(Document, pk=pk)
+        if decision == 'valider':
+            doc.statut = Document.Statut.VALIDE
+            action = 'Validation document'
+        elif decision == 'rejeter':
+            doc.statut = Document.Statut.REJETE
+            action = 'Rejet document'
+        else:
+            return Response({'detail': 'Decision invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+        doc.save(update_fields=['statut', 'updated_at'])
+        log(request.user, JournalActivite.TypeAction.VALIDATION, f'{action} : {doc.titre}', request.META.get('REMOTE_ADDR'))
+        return Response(DocumentSerializer(doc, context={'request': request}).data)
+
+
+class DocumentDownloadView(APIView):
+    def get(self, request, pk):
+        doc = get_object_or_404(Document, pk=pk)
+        if doc.statut != Document.Statut.VALIDE and request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
+            return Response({'detail': 'Document non valide.'}, status=status.HTTP_403_FORBIDDEN)
+        doc.nb_telechargements += 1
+        doc.save(update_fields=['nb_telechargements'])
+        log(request.user, JournalActivite.TypeAction.TELECHARGEMENT, f'Telechargement : {doc.titre}', request.META.get('REMOTE_ADDR'))
+        return FileResponse(doc.fichier.open(), as_attachment=True, filename=doc.fichier.name.split('/')[-1])
