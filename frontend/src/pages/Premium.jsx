@@ -1,5 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Award, BarChart3, CheckCircle2, Clock3, CreditCard, Download, FileText, Medal, Phone, Receipt, Settings, ShieldCheck, Wallet, XCircle } from 'lucide-react';
+import {
+  Award,
+  BarChart3,
+  CheckCircle2,
+  Clock3,
+  CreditCard,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Medal,
+  Phone,
+  Receipt,
+  ScrollText,
+  Settings,
+  ShieldCheck,
+  Wallet,
+  XCircle,
+} from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../contexts/useAuth';
 import Spinner from '../components/Spinner';
@@ -23,6 +40,32 @@ function statusBadge(statut) {
   return <span className="premium-status warning"><Clock3 size={14} /> En attente</span>;
 }
 
+
+function filenameFromDisposition(disposition, fallback) {
+  const match = /filename="?([^";]+)"?/i.exec(disposition || '');
+  return match?.[1] || fallback;
+}
+
+function saveBlob(data, filename) {
+  const blobUrl = window.URL.createObjectURL(new Blob([data]));
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(blobUrl);
+}
+
+function formatDate(value) {
+  if (!value) return '—';
+  try {
+    return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
 export default function Premium() {
   const { user } = useAuth();
   const isAdmin = ['ADMIN', 'CHEF_DEPT'].includes(user?.role);
@@ -30,10 +73,12 @@ export default function Premium() {
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [policy, setPolicy] = useState(null);
   const [settingsForm, setSettingsForm] = useState({ orange_money_numero: '', mtn_momo_numero: '', beneficiaire: '', note_paiement: '' });
   const [me, setMe] = useState(null);
   const [stats, setStats] = useState(null);
   const [payments, setPayments] = useState([]);
+  const [audit, setAudit] = useState([]);
   const [selectedPlan, setSelectedPlan] = useState('');
   const [form, setForm] = useState({ moyen: 'MTN_MOMO', numero_payeur: '', reference: '', preuve: null, commentaire: '' });
   const [message, setMessage] = useState('');
@@ -42,16 +87,18 @@ export default function Premium() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const requests = [api.get('/premium/plans/'), api.get('/premium/me/'), api.get('/premium/parametres/')];
+      const requests = [api.get('/premium/plans/'), api.get('/premium/me/'), api.get('/premium/parametres/'), api.get('/premium/politique/')];
       if (isAdmin) {
         requests.push(api.get('/premium/stats/'));
         requests.push(api.get('/premium/paiements/'));
+        requests.push(api.get('/premium/audit/'));
       }
-      const [plansRes, meRes, settingsRes, statsRes, paymentsRes] = await Promise.all(requests);
+      const [plansRes, meRes, settingsRes, policyRes, statsRes, paymentsRes, auditRes] = await Promise.all(requests);
       const settingsData = settingsRes.data || {};
       setPlans(plansRes.data.results || plansRes.data || []);
       setMe(meRes.data);
       setSettings(settingsData);
+      setPolicy(policyRes.data || null);
       setSettingsForm({
         orange_money_numero: settingsData.orange_money_numero || '',
         mtn_momo_numero: settingsData.mtn_momo_numero || '',
@@ -60,6 +107,7 @@ export default function Premium() {
       });
       if (statsRes) setStats(statsRes.data);
       if (paymentsRes) setPayments(paymentsRes.data.results || paymentsRes.data || []);
+      if (auditRes) setAudit(auditRes.data.results || auditRes.data || []);
     } catch {
       setMessage('Impossible de charger le module premium. Vérifiez que le backend est lancé et migré.');
     } finally {
@@ -94,6 +142,7 @@ export default function Premium() {
       const response = await api.patch('/premium/parametres/', settingsForm);
       setSettings(response.data);
       setMessage('Paramètres de paiement mis à jour.');
+      void load();
     } catch {
       setMessage('Modification des paramètres impossible.');
     }
@@ -133,10 +182,28 @@ export default function Premium() {
     const motif = decision === 'rejeter' ? window.prompt('Motif du rejet :') || '' : '';
     try {
       await api.post(`/premium/paiements/${payment.id}/${decision}/`, { motif_rejet: motif });
-      setMessage(decision === 'valider' ? 'Paiement validé et crédits ajoutés.' : 'Paiement rejeté.');
+      setMessage(decision === 'valider' ? 'Paiement validé, crédits ajoutés et reçu PDF disponible.' : 'Paiement rejeté.');
       void load();
     } catch {
       setMessage('Décision impossible. Vérifiez vos droits.');
+    }
+  };
+
+  const exportPayments = async () => {
+    try {
+      const response = await api.get('/premium/paiements/export/', { responseType: 'blob' });
+      saveBlob(response.data, filenameFromDisposition(response.headers['content-disposition'], 'export_paiements_premium.xlsx'));
+    } catch {
+      setMessage('Export Excel impossible. Vérifiez vos droits administratifs.');
+    }
+  };
+
+  const downloadReceipt = async (payment) => {
+    try {
+      const response = await api.get(`/premium/paiements/${payment.id}/recu/`, { responseType: 'blob' });
+      saveBlob(response.data, filenameFromDisposition(response.headers['content-disposition'], `recu_premium_${payment.id}.pdf`));
+    } catch {
+      setMessage('Téléchargement du reçu impossible. Le paiement doit être validé.');
     }
   };
 
@@ -162,10 +229,15 @@ export default function Premium() {
       <div className="page-title premium-title">
         <div>
           <p className="premium-kicker">{isAdmin ? 'Supervision financière' : 'Accès numérique contrôlé'}</p>
-          <h2>{isAdmin ? 'Gestion Premium et paiements' : 'Accès Premium et paiements'}</h2>
-          <p>{isAdmin ? 'Contrôle des paiements, packs, numéros de dépôt, recettes et valeur documentaire.' : 'Trois documents gratuits par mois, crédits supplémentaires et mémoires complets premium.'}</p>
+          <h2>{isAdmin ? 'Gestion Premium, reçus et audit' : 'Accès Premium et paiements'}</h2>
+          <p>{isAdmin ? 'Contrôle des paiements, reçus PDF, export Excel, audit et valeur documentaire.' : 'Trois documents gratuits par mois, crédits supplémentaires et mémoires complets premium.'}</p>
         </div>
-        {isAdmin && <button className="btn btn-outline-primary" type="button" onClick={() => void seedPlans()}><ShieldCheck size={17} /> Initialiser les packs</button>}
+        {isAdmin && (
+          <div className="premium-actions-row">
+            <button className="btn btn-outline-primary" type="button" onClick={() => void seedPlans()}><ShieldCheck size={17} /> Initialiser les packs</button>
+            <button className="btn btn-primary" type="button" onClick={() => void exportPayments()}><FileSpreadsheet size={17} /> Export Excel</button>
+          </div>
+        )}
       </div>
 
       {message && <div className="alert alert-info border-0 shadow-sm">{message}</div>}
@@ -193,16 +265,18 @@ export default function Premium() {
                 <h4>Paiements à contrôler</h4>
                 <div className="table-responsive">
                   <table className="table align-middle premium-table">
-                    <thead><tr><th>Utilisateur</th><th>Pack</th><th>Montant</th><th>Preuve</th><th>Statut</th><th>Action</th></tr></thead>
+                    <thead><tr><th>Utilisateur</th><th>Pack</th><th>Montant</th><th>Preuve</th><th>Statut</th><th>Reçu</th><th>Action</th></tr></thead>
                     <tbody>
                       {payments.slice(0, 12).map((payment) => (
                         <tr key={payment.id}>
                           <td>{payment.utilisateur_nom}</td><td>{payment.plan_detail?.nom || '—'}</td><td>{money(payment.montant)}</td>
                           <td>{payment.preuve_url ? <a href={payment.preuve_url} target="_blank" rel="noreferrer">Voir</a> : <span className="text-muted">—</span>}</td>
                           <td>{statusBadge(payment.statut)}</td>
+                          <td>{payment.recu_url ? <button className="btn btn-sm btn-outline-primary" type="button" onClick={() => void downloadReceipt(payment)}><Receipt size={14} /> PDF</button> : <span className="text-muted small">—</span>}</td>
                           <td>{payment.statut === 'EN_ATTENTE' ? <div className="d-flex flex-wrap gap-1"><button className="btn btn-sm btn-success" type="button" onClick={() => void decidePayment(payment, 'valider')}>Valider</button><button className="btn btn-sm btn-outline-danger" type="button" onClick={() => void decidePayment(payment, 'rejeter')}>Rejeter</button></div> : <span className="text-muted small">Traité</span>}</td>
                         </tr>
                       ))}
+                      {payments.length === 0 && <tr><td colSpan={7}><div className="empty-state compact-empty">Aucun paiement enregistré.</div></td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -221,11 +295,21 @@ export default function Premium() {
             </div>
           </section>
 
-          <section className="premium-panel">
-            <div className="premium-panel-head"><div><h3>Mémoires les plus achetés</h3><p>Indicateur de valeur documentaire et base future de reversement aux auteurs.</p></div><Medal size={24} /></div>
-            <div className="premium-top-list">
-              {(stats?.top_memoires || []).map((item, index) => <div className="premium-top-item" key={item.memoire_id}><span className="rank">#{index + 1}</span><div><strong>{item.memoire__titre}</strong><small>{item.memoire__auteur_nom} · {item.achats} achats · part auteur estimée {money(item.part_auteur_estimee)}</small></div><b>{money(item.revenu_estime)}</b></div>)}
-              {(stats?.top_memoires || []).length === 0 && <div className="empty-state compact-empty">Aucun achat de mémoire pour le moment.</div>}
+          <section className="premium-admin-grid premium-admin-grid-bottom">
+            <div className="premium-panel">
+              <div className="premium-panel-head"><div><h3>Mémoires les plus achetés</h3><p>Indicateur de valeur documentaire et base future de reversement aux auteurs.</p></div><Medal size={24} /></div>
+              <div className="premium-top-list">
+                {(stats?.top_memoires || []).map((item, index) => <div className="premium-top-item" key={item.memoire_id}><span className="rank">#{index + 1}</span><div><strong>{item.memoire__titre}</strong><small>{item.memoire__auteur_nom} · {item.achats} achats · part auteur estimée {money(item.part_auteur_estimee)}</small></div><b>{money(item.revenu_estime)}</b></div>)}
+                {(stats?.top_memoires || []).length === 0 && <div className="empty-state compact-empty">Aucun achat de mémoire pour le moment.</div>}
+              </div>
+            </div>
+
+            <div className="premium-panel">
+              <div className="premium-panel-head"><div><h3>Audit financier</h3><p>Dernières opérations premium tracées.</p></div><ScrollText size={24} /></div>
+              <div className="premium-audit-list">
+                {audit.slice(0, 10).map((item) => <div className="premium-audit-item" key={item.id}><strong>{item.action}</strong><span>{item.description || 'Opération premium'}</span><small>{item.acteur_nom} · {formatDate(item.created_at)}</small></div>)}
+                {audit.length === 0 && <div className="empty-state compact-empty">Aucune opération auditée.</div>}
+              </div>
             </div>
           </section>
         </>
@@ -255,15 +339,27 @@ export default function Premium() {
           </section>
 
           <section className="premium-panel">
-            <div className="premium-panel-head"><div><h3>Historique personnel</h3><p>Paiements, mémoires achetés et derniers téléchargements.</p></div><Clock3 size={22} /></div>
+            <div className="premium-panel-head"><div><h3>Historique personnel</h3><p>Paiements, reçus, mémoires achetés et derniers téléchargements.</p></div><Clock3 size={22} /></div>
             <div className="premium-history-list">
-              {(me?.paiements_recents || []).map((payment) => <div className="premium-history-item" key={payment.id}><div><strong>{payment.plan_detail?.nom || 'Pack'}</strong><span>{money(payment.montant)} · {payment.moyen}</span></div>{statusBadge(payment.statut)}</div>)}
+              {(me?.paiements_recents || []).map((payment) => <div className="premium-history-item" key={payment.id}><div><strong>{payment.plan_detail?.nom || 'Pack'}</strong><span>{money(payment.montant)} · {payment.moyen}</span>{payment.recu_url && <button className="premium-receipt-link premium-link-button" type="button" onClick={() => void downloadReceipt(payment)}><Receipt size={14} /> Télécharger le reçu</button>}</div>{statusBadge(payment.statut)}</div>)}
               {(me?.paiements_recents || []).length === 0 && <div className="empty-state compact-empty">Aucun paiement enregistré.</div>}
             </div>
             <div className="premium-mini-section"><h4>Mémoires débloqués</h4>{(me?.memoires_achetes || []).map((achat) => <div className="premium-history-item compact" key={achat.id}><div><strong>{achat.memoire_titre}</strong><span>Auteur : {achat.auteur_nom}</span></div><Medal size={17} /></div>)}{(me?.memoires_achetes || []).length === 0 && <p className="text-muted small mb-0">Aucun mémoire acheté.</p>}</div>
           </section>
         </div>
       )}
+
+      <section className="premium-panel premium-policy-panel">
+        <div className="premium-panel-head"><div><h3>Politique d’accès premium</h3><p>Règles institutionnelles affichées aux utilisateurs.</p></div><ScrollText size={22} /></div>
+        <div className="premium-policy-grid">
+          <p><strong>Documents.</strong> {policy?.documents}</p>
+          <p><strong>Mémoires.</strong> {policy?.memoires}</p>
+          <p><strong>Paiements.</strong> {policy?.paiements}</p>
+          <p><strong>Reçus.</strong> {policy?.recu}</p>
+          <p><strong>Valorisation auteur.</strong> {policy?.auteurs}</p>
+          <p><strong>Responsabilité.</strong> {policy?.responsabilite}</p>
+        </div>
+      </section>
     </div>
   );
 }

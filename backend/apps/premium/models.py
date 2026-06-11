@@ -173,3 +173,41 @@ class HistoriqueTelechargement(models.Model):
 
     def __str__(self):
         return f'{self.utilisateur} - {self.type_ressource} - {self.created_at:%Y-%m-%d}'
+
+
+class AuditPremium(models.Model):
+    class TypeAction(models.TextChoices):
+        PAIEMENT_CREE = 'PAIEMENT_CREE', 'Paiement cree'
+        PAIEMENT_VALIDE = 'PAIEMENT_VALIDE', 'Paiement valide'
+        PAIEMENT_REJETE = 'PAIEMENT_REJETE', 'Paiement rejete'
+        PARAMETRES_MODIFIES = 'PARAMETRES_MODIFIES', 'Parametres modifies'
+        RECU_TELECHARGE = 'RECU_TELECHARGE', 'Recu telecharge'
+        EXPORT_PAIEMENTS = 'EXPORT_PAIEMENTS', 'Export paiements'
+        CONSULTATION_STATS = 'CONSULTATION_STATS', 'Consultation statistiques'
+
+    acteur = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='audits_premium_effectues')
+    utilisateur_cible = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='audits_premium_subis')
+    paiement = models.ForeignKey(PaiementAcces, on_delete=models.SET_NULL, null=True, blank=True, related_name='audits')
+    action = models.CharField(max_length=40, choices=TypeAction.choices)
+    description = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Audit premium'
+        verbose_name_plural = 'Audits premium'
+
+    def __str__(self):
+        return f'{self.get_action_display()} - {self.created_at:%Y-%m-%d %H:%M}'
+
+
+def audit_premium(action, acteur=None, utilisateur_cible=None, paiement=None, description='', ip_address=None):
+    return AuditPremium.objects.create(
+        action=action,
+        acteur=acteur if getattr(acteur, 'is_authenticated', False) else None,
+        utilisateur_cible=utilisateur_cible,
+        paiement=paiement,
+        description=description,
+        ip_address=ip_address,
+    )

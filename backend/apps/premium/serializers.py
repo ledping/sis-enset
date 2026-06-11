@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import AchatMemoire, HistoriqueTelechargement, PaiementAcces, ParametresPremium, PlanAcces, PortefeuilleUtilisateur
+from .models import AchatMemoire, AuditPremium, HistoriqueTelechargement, PaiementAcces, ParametresPremium, PlanAcces, PortefeuilleUtilisateur
 
 
 class PlanAccesSerializer(serializers.ModelSerializer):
@@ -25,15 +25,16 @@ class PaiementAccesSerializer(serializers.ModelSerializer):
     plan_detail = PlanAccesSerializer(source='plan', read_only=True)
     utilisateur_nom = serializers.SerializerMethodField()
     preuve_url = serializers.SerializerMethodField()
+    recu_url = serializers.SerializerMethodField()
 
     class Meta:
         model = PaiementAcces
         fields = [
             'id', 'utilisateur', 'utilisateur_nom', 'plan', 'plan_detail', 'montant', 'moyen',
-            'numero_payeur', 'reference', 'preuve', 'preuve_url', 'commentaire', 'statut',
+            'numero_payeur', 'reference', 'preuve', 'preuve_url', 'recu_url', 'commentaire', 'statut',
             'motif_rejet', 'valide_par', 'date_validation', 'created_at',
         ]
-        read_only_fields = ['id', 'utilisateur', 'statut', 'motif_rejet', 'valide_par', 'date_validation', 'created_at', 'preuve_url']
+        read_only_fields = ['id', 'utilisateur', 'statut', 'motif_rejet', 'valide_par', 'date_validation', 'created_at', 'preuve_url', 'recu_url']
 
     def get_utilisateur_nom(self, obj):
         return obj.utilisateur.get_full_name() or obj.utilisateur.username
@@ -43,6 +44,14 @@ class PaiementAccesSerializer(serializers.ModelSerializer):
         if not obj.preuve:
             return ''
         return request.build_absolute_uri(obj.preuve.url) if request else obj.preuve.url
+
+
+    def get_recu_url(self, obj):
+        request = self.context.get('request')
+        if obj.statut != PaiementAcces.Statut.VALIDE:
+            return ''
+        path = f'/api/premium/paiements/{obj.id}/recu/'
+        return request.build_absolute_uri(path) if request else path
 
     def validate(self, attrs):
         plan = attrs.get('plan')
@@ -78,3 +87,23 @@ class HistoriqueTelechargementSerializer(serializers.ModelSerializer):
         if obj.memoire:
             return obj.memoire.titre
         return 'Ressource supprimée'
+
+
+
+class AuditPremiumSerializer(serializers.ModelSerializer):
+    acteur_nom = serializers.SerializerMethodField()
+    utilisateur_cible_nom = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AuditPremium
+        fields = ['id', 'action', 'acteur_nom', 'utilisateur_cible_nom', 'paiement', 'description', 'ip_address', 'created_at']
+
+    def get_acteur_nom(self, obj):
+        if not obj.acteur:
+            return 'Systeme'
+        return obj.acteur.get_full_name() or obj.acteur.username
+
+    def get_utilisateur_cible_nom(self, obj):
+        if not obj.utilisateur_cible:
+            return ''
+        return obj.utilisateur_cible.get_full_name() or obj.utilisateur_cible.username

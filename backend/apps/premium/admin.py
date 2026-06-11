@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AchatMemoire, HistoriqueTelechargement, PaiementAcces, ParametresPremium, PlanAcces, PortefeuilleUtilisateur
+from .models import AchatMemoire, AuditPremium, HistoriqueTelechargement, PaiementAcces, ParametresPremium, PlanAcces, PortefeuilleUtilisateur
 
 
 @admin.register(ParametresPremium)
@@ -38,3 +38,12 @@ class HistoriqueTelechargementAdmin(admin.ModelAdmin):
     list_display = ('utilisateur', 'type_ressource', 'gratuit', 'via_credit', 'created_at')
     list_filter = ('type_ressource', 'gratuit', 'via_credit')
     search_fields = ('utilisateur__username', 'document__titre', 'memoire__titre')
+
+
+
+@admin.register(AuditPremium)
+class AuditPremiumAdmin(admin.ModelAdmin):
+    list_display = ('action', 'acteur', 'utilisateur_cible', 'paiement', 'ip_address', 'created_at')
+    list_filter = ('action', 'created_at')
+    search_fields = ('acteur__username', 'utilisateur_cible__username', 'description')
+    readonly_fields = ('action', 'acteur', 'utilisateur_cible', 'paiement', 'description', 'ip_address', 'created_at')
