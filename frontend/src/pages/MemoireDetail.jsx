@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Download, FileText, Mail, Phone, PlayCircle, Trash2, UserRound } from 'lucide-react';
+import { ArrowLeft, BookOpen, CreditCard, Download, FileText, Lock, Mail, Phone, PlayCircle, Trash2, UserRound } from 'lucide-react';
 import api, { API_BASE_URL } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import Spinner from '../components/Spinner';
@@ -45,6 +45,7 @@ export default function MemoireDetail() {
   const [memoire, setMemoire] = useState(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [premiumInfo, setPremiumInfo] = useState(null);
 
   useEffect(() => {
     let ignore = false;
@@ -65,6 +66,20 @@ export default function MemoireDetail() {
     };
   }, [id]);
 
+  useEffect(() => {
+    let ignore = false;
+    api.get('/premium/me/')
+      .then((response) => {
+        if (!ignore) setPremiumInfo(response.data.summary);
+      })
+      .catch(() => {
+        if (!ignore) setPremiumInfo(null);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   const tools = useMemo(() => {
     if (!memoire?.materiels_outils) return [];
     return Array.isArray(memoire.materiels_outils) ? memoire.materiels_outils : [];
@@ -73,13 +88,23 @@ export default function MemoireDetail() {
   const canDelete = (item) => ['ADMIN', 'CHEF_DEPT'].includes(user?.role) || item?.depose_par_id === user?.id || item?.depose_par_detail?.id === user?.id;
 
   const download = async () => {
-    const response = await api.get(`/memoires/${id}/dl/`, { responseType: 'blob' });
-    const url = URL.createObjectURL(response.data);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${memoire.titre}.pdf`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    try {
+      const response = await api.get(`/memoires/${id}/dl/`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${memoire.titre}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      const info = await api.get('/premium/me/');
+      setPremiumInfo(info.data.summary);
+    } catch (error) {
+      if (error.response?.status === 402) {
+        setMessage(error.response.data?.detail || 'Crédit mémoire requis pour télécharger le document complet.');
+      } else {
+        setMessage('Téléchargement impossible.');
+      }
+    }
   };
 
   const handleDelete = async () => {
@@ -95,8 +120,9 @@ export default function MemoireDetail() {
   };
 
   if (loading) return <Spinner label="Chargement du dossier mémoire..." />;
-  if (message) return <div className="alert alert-warning border-0 shadow-sm">{message}</div>;
-  if (!memoire) return null;
+  if (!memoire) {
+    return message ? <div className="alert alert-warning border-0 shadow-sm">{message}</div> : null;
+  }
 
   const keyList = keywords(memoire.mots_cles);
   const resultImages = memoire.images_resultats_urls || [];
@@ -128,11 +154,20 @@ export default function MemoireDetail() {
         </div>
       </div>
 
+      {message && <div className="alert alert-warning border-0 shadow-sm">{message}</div>}
+
       <div className="article-summary-strip">
         <div><span>Qualité de complétude</span><strong>{articleScore}%</strong></div>
         <div><span>Outils renseignés</span><strong>{tools.length}</strong></div>
         <div><span>Images résultats</span><strong>{resultImages.length}/4</strong></div>
         <div><span>Année académique</span><strong>{memoire.annee_academique}</strong></div>
+      </div>
+
+      <div className="premium-access-strip">
+        <span className="premium-access-chip"><BookOpen size={15} /> Article consultable gratuitement</span>
+        <span className="premium-access-chip"><Lock size={15} /> PDF complet : 1 crédit mémoire</span>
+        {premiumInfo && <span className="premium-access-chip"><CreditCard size={15} /> Crédits mémoires : {premiumInfo.credits_memoires}</span>}
+        <Link className="btn btn-sm btn-outline-primary ms-auto" to="/premium">Acheter des crédits</Link>
       </div>
 
       <article className="ieee-article ieee-article-v8 data-card">
@@ -257,9 +292,15 @@ export default function MemoireDetail() {
             <div className="card-header"><FileText size={17} /> Livrables du dossier</div>
             <div className="card-body d-flex flex-wrap gap-2">
               {resources.map((item) => (
-                <a key={item.label} className={item.primary ? 'btn btn-primary' : 'btn btn-outline-primary'} href={fileUrl(item.file)} target="_blank" rel="noreferrer">
-                  {item.label}
-                </a>
+                item.primary ? (
+                  <button key={item.label} type="button" className="btn btn-primary" onClick={() => void download()}>
+                    <Lock size={16} /> {item.label}
+                  </button>
+                ) : (
+                  <a key={item.label} className="btn btn-outline-primary" href={fileUrl(item.file)} target="_blank" rel="noreferrer">
+                    {item.label}
+                  </a>
+                )
               ))}
               {!resources.length && <div className="empty-state compact-empty w-100">Aucun livrable disponible.</div>}
             </div>

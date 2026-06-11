@@ -273,3 +273,107 @@ a { text-decoration: none; }
     justify-content: space-between;
   }
 }
+
+.user-chip-wrap { position: relative; }
+.user-info-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: min(340px, 88vw);
+  background: #fff;
+  border: 1px solid var(--enset-border);
+  border-radius: 1.25rem;
+  padding: 1rem;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .16);
+  z-index: 80;
+}
+.user-info-popover .large { width: 48px; height: 48px; }
+.user-info-popover strong { display: block; color: #0f172a; }
+.user-info-popover span { display: block; color: #64748b; font-size: .9rem; }
+.user-info-popover p { color: #64748b; margin: .55rem 0 .8rem; }
+.user-popover-close { position: absolute; right: .65rem; top: .55rem; border: 0; background: #f1f5f9; border-radius: 999px; width: 28px; height: 28px; display: grid; place-items: center; color: #334155; }
+@media (max-width: 768px) { .user-meta { display: none; } .user-info-popover { right: -3rem; } }
+
+.search-results-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.search-result-panel { background: #fff; border: 1px solid var(--enset-border); border-radius: 1.4rem; box-shadow: var(--enset-shadow); overflow: hidden; min-width: 0; }
+.search-panel-head { display: flex; align-items: center; gap: .55rem; padding: 1rem 1.1rem; border-bottom: 1px solid var(--enset-border); }
+.search-panel-head h3 { margin: 0; font-size: 1.05rem; font-weight: 900; color: #0f172a; }
+.search-result-list { display: grid; gap: .75rem; padding: 1rem; }
+.search-result-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .85rem; align-items: center; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 1.1rem; padding: .85rem; min-width: 0; }
+.search-result-icon { width: 42px; height: 42px; border-radius: 1rem; display: grid; place-items: center; background: #eff6ff; color: #1d4ed8; }
+.search-result-body { min-width: 0; }
+.search-result-body strong { display: block; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-result-body span { display: block; color: #64748b; font-size: .86rem; }
+.search-result-body p { color: #64748b; margin: .35rem 0 0; font-size: .9rem; }
+.search-result-actions { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: flex-end; }
+@media (max-width: 1100px) { .search-results-grid { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .search-result-card { grid-template-columns: 1fr; } .search-result-icon { display: none; } .search-result-actions { justify-content: flex-start; } }
+
+/* Correctif v9.2 - tableaux de bord par role et ergonomie premium */
+.dashboard-role-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr);
+  gap: 1rem;
+}
+.dashboard-role-action {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .8rem;
+  text-decoration: none;
+}
+.dashboard-role-action-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 1rem;
+  display: grid;
+  place-items: center;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+.dashboard-role-action strong {
+  display: block;
+  color: #0f172a;
+  font-weight: 900;
+}
+.dashboard-role-action span {
+  color: #64748b;
+  font-size: .9rem;
+}
+.dashboard-role-action b {
+  color: #1d4ed8;
+}
+.dashboard-role-note {
+  display: grid;
+  gap: .75rem;
+  padding: 1rem;
+  border-radius: 1.15rem;
+  background: linear-gradient(135deg, #f8fafc, #eff6ff);
+  border: 1px solid #dbeafe;
+}
+.dashboard-role-note strong {
+  color: #0f172a;
+  font-size: 1.05rem;
+}
+.dashboard-role-note p {
+  color: #64748b;
+  margin: 0;
+  line-height: 1.65;
+}
+.dashboard-student .rank-list .badge,
+.dashboard-teacher .rank-list .badge {
+  white-space: nowrap;
+}
+.dashboard-student .dashboard-hero,
+.dashboard-teacher .dashboard-hero {
+  align-items: center;
+}
+@media (max-width: 1100px) {
+  .dashboard-role-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .dashboard-role-action { grid-template-columns: 1fr; }
+  .dashboard-role-action-icon { width: 34px; height: 34px; }
+  .dashboard-hero-actions { width: 100%; }
+  .dashboard-hero-actions .btn { flex: 1 1 auto; justify-content: center; }
+}

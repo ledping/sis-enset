@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Download, FileText, Search } from 'lucide-react';
+import { BookOpen, Download, Eye, FileText, Search } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../api';
 import Spinner from '../components/Spinner';
 
@@ -9,6 +10,7 @@ export default function Recherche() {
   const [memoires, setMemoires] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   const params = useMemo(() => (query.trim() ? { search: query.trim() } : {}), [query]);
 
@@ -31,14 +33,24 @@ export default function Recherche() {
     return () => clearTimeout(timer);
   }, [params]);
 
-  const download = async (url, filename) => {
-    const response = await api.get(url, { responseType: 'blob' });
-    const objectUrl = URL.createObjectURL(response.data);
-    const anchor = document.createElement('a');
-    anchor.href = objectUrl;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(objectUrl);
+  const download = async (url, filename, premiumLabel) => {
+    setMessage('');
+    try {
+      const response = await api.get(url, { responseType: 'blob' });
+      const objectUrl = URL.createObjectURL(response.data);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(objectUrl);
+      setMessage('Téléchargement lancé.');
+    } catch (downloadError) {
+      if (downloadError.response?.status === 402) {
+        setMessage(downloadError.response.data?.detail || `${premiumLabel} : crédit premium requis. Ouvrez Accès premium pour acheter un pack.`);
+      } else {
+        setMessage('Téléchargement impossible pour le moment.');
+      }
+    }
   };
 
   return (
@@ -57,41 +69,50 @@ export default function Recherche() {
         </div>
       </div>
 
+      {message && <div className="alert alert-info border-0 shadow-sm">{message}</div>}
       {error && <div className="alert alert-warning border-0 shadow-sm">{error}</div>}
       {loading && <Spinner label="Recherche en cours..." />}
 
       {!loading && (
-        <div className="row g-4">
-          <div className="col-lg-6">
-            <div className="card data-card h-100">
-              <div className="card-header d-flex align-items-center gap-2"><FileText size={18} /> Documents ({documents.length})</div>
-              <div className="card-body p-0">
-                {documents.length ? <ul className="list-group list-group-flush">
-                  {documents.map((doc) => <li className="list-group-item" key={`doc-${doc.id}`}>
-                    <div className="d-flex justify-content-between gap-3">
-                      <div><strong>{doc.titre}</strong><div className="text-muted small">{doc.type_doc} · {doc.departement}</div></div>
-                      <button className="btn btn-sm btn-outline-primary" onClick={() => download(`/documents/${doc.id}/dl/`, doc.titre)}><Download size={14} /></button>
-                    </div>
-                  </li>)}
-                </ul> : <div className="empty-state m-3">Aucun document trouvé.</div>}
-              </div>
+        <div className="search-results-grid">
+          <section className="search-result-panel">
+            <div className="search-panel-head"><FileText size={18} /><h3>Documents ({documents.length})</h3></div>
+            <div className="search-result-list">
+              {documents.map((doc) => (
+                <article className="search-result-card" key={`doc-${doc.id}`}>
+                  <div className="search-result-icon"><FileText size={21} /></div>
+                  <div className="search-result-body">
+                    <strong>{doc.titre}</strong>
+                    <span>{doc.type_doc} · {doc.departement || 'Département'} · {doc.niveau || 'Niveau non précisé'}</span>
+                    <p>{doc.description?.slice(0, 140) || 'Document pédagogique validé.'}</p>
+                  </div>
+                  <button className="btn btn-sm btn-outline-primary" type="button" onClick={() => void download(`/documents/${doc.id}/dl/`, doc.titre, 'Document')}><Download size={14} /> Télécharger</button>
+                </article>
+              ))}
+              {documents.length === 0 && <div className="empty-state m-3">Aucun document trouvé.</div>}
             </div>
-          </div>
-          <div className="col-lg-6">
-            <div className="card data-card h-100">
-              <div className="card-header d-flex align-items-center gap-2"><BookOpen size={18} /> Mémoires ({memoires.length})</div>
-              <div className="card-body p-0">
-                {memoires.length ? <ul className="list-group list-group-flush">
-                  {memoires.map((memoire) => <li className="list-group-item" key={`mem-${memoire.id}`}>
-                    <div className="d-flex justify-content-between gap-3">
-                      <div><strong>{memoire.titre}</strong><div className="text-muted small">{memoire.auteur_nom} · {memoire.filiere} · {memoire.annee_academique}</div></div>
-                      <button className="btn btn-sm btn-outline-primary" onClick={() => download(`/memoires/${memoire.id}/dl/`, `${memoire.titre}.pdf`)}><Download size={14} /></button>
-                    </div>
-                  </li>)}
-                </ul> : <div className="empty-state m-3">Aucun mémoire trouvé.</div>}
-              </div>
+          </section>
+
+          <section className="search-result-panel">
+            <div className="search-panel-head"><BookOpen size={18} /><h3>Mémoires ({memoires.length})</h3></div>
+            <div className="search-result-list">
+              {memoires.map((memoire) => (
+                <article className="search-result-card" key={`mem-${memoire.id}`}>
+                  <div className="search-result-icon"><BookOpen size={21} /></div>
+                  <div className="search-result-body">
+                    <strong>{memoire.titre}</strong>
+                    <span>{memoire.auteur_nom} · {memoire.filiere} · {memoire.annee_academique}</span>
+                    <p>{memoire.resume?.slice(0, 150) || 'Mini-article disponible gratuitement.'}</p>
+                  </div>
+                  <div className="search-result-actions">
+                    <Link className="btn btn-sm btn-outline-primary" to={`/memoires/${memoire.id}`}><Eye size={14} /> Article</Link>
+                    <button className="btn btn-sm btn-primary" type="button" onClick={() => void download(`/memoires/${memoire.id}/dl/`, `${memoire.titre}.pdf`, 'Mémoire complet')}><Download size={14} /> PDF</button>
+                  </div>
+                </article>
+              ))}
+              {memoires.length === 0 && <div className="empty-state m-3">Aucun mémoire trouvé.</div>}
             </div>
-          </div>
+          </section>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { BarChart3, Bell, BookOpen, CheckSquare, FileSearch, FileText, LogOut, Menu, MessageSquareText, Network, ShieldCheck, UserCog, UserRound } from 'lucide-react';
+import { BarChart3, Bell, BookOpen, CheckSquare, CreditCard, FileSearch, FileText, LogOut, Menu, MessageSquareText, Network, ShieldCheck, UserCog, UserRound, X } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
 import api from '../api';
 
@@ -18,6 +18,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [profileOpen, setProfileOpen] = useState(false);
   const isAdmin = user?.role === 'ADMIN';
   const canValidate = ['ADMIN', 'CHEF_DEPT'].includes(user?.role);
 
@@ -71,6 +72,8 @@ export default function Layout() {
     canValidate ? { to: '/sessions', label: 'Sessions reseau', icon: Network } : null,
     isAdmin ? { to: '/utilisateurs', label: 'Utilisateurs', icon: UserCog } : null,
     { to: '/messages', label: 'Messagerie', icon: MessageSquareText, badge: unreadMessages },
+    user?.role === 'ETUDIANT' ? { to: '/premium', label: 'Acces premium', icon: CreditCard } : null,
+    canValidate ? { to: '/premium', label: 'Gestion premium', icon: CreditCard } : null,
     { to: '/notifications', label: 'Notifications', icon: Bell, badge: unreadNotifications },
     { to: '/profil', label: 'Mon compte', icon: UserRound },
   ].filter(Boolean);
@@ -134,17 +137,34 @@ export default function Layout() {
               <Bell size={19} />
               {unreadNotifications > 0 && <span>{unreadNotifications}</span>}
             </button>
-            <div className="user-chip" onClick={() => navigate('/profil')} role="button" tabIndex={0}>
-              <div className="user-avatar">
-                {user?.photo_url ? <img src={user.photo_url} alt="Profil" /> : <UserRound size={18} />}
+            <div className="user-chip-wrap">
+              <div className="user-chip" onClick={() => setProfileOpen((current) => !current)} role="button" tabIndex={0}>
+                <div className="user-avatar">
+                  {user?.photo_url ? <img src={user.photo_url} alt="Profil" /> : <UserRound size={18} />}
+                </div>
+                <div className="user-meta">
+                  <strong>{user?.first_name || user?.username || 'Utilisateur'}</strong>
+                  <span><ShieldCheck size={13} /> {getRoleLabel(user?.role)}</span>
+                </div>
+                <button className="logout-button" type="button" onClick={(event) => { event.stopPropagation(); void handleLogout(); }} title="Se deconnecter">
+                  <LogOut size={18} />
+                </button>
               </div>
-              <div className="user-meta">
-                <strong>{user?.first_name || user?.username || 'Utilisateur'}</strong>
-                <span><ShieldCheck size={13} /> {getRoleLabel(user?.role)}</span>
-              </div>
-              <button className="logout-button" type="button" onClick={(event) => { event.stopPropagation(); void handleLogout(); }} title="Se deconnecter">
-                <LogOut size={18} />
-              </button>
+              {profileOpen && (
+                <div className="user-info-popover">
+                  <button className="user-popover-close" type="button" onClick={() => setProfileOpen(false)}><X size={15} /></button>
+                  <div className="d-flex align-items-center gap-2 mb-2">
+                    <div className="user-avatar large">{user?.photo_url ? <img src={user.photo_url} alt="Profil" /> : <UserRound size={22} />}</div>
+                    <div><strong>{user?.first_name || user?.username}</strong><span>{getRoleLabel(user?.role)}</span></div>
+                  </div>
+                  <p>Connecté en tant que <b>{getRoleLabel(user?.role)}</b>. Les droits affichés dans le menu dépendent de ce profil.</p>
+                  <div className="d-flex flex-wrap gap-2">
+                    <button className="btn btn-sm btn-primary" type="button" onClick={() => { setProfileOpen(false); navigate('/profil'); }}>Voir mon compte</button>
+                    {user?.role === 'ETUDIANT' && <button className="btn btn-sm btn-outline-primary" type="button" onClick={() => { setProfileOpen(false); navigate('/premium'); }}>Mes crédits</button>}
+                    {canValidate && <button className="btn btn-sm btn-outline-primary" type="button" onClick={() => { setProfileOpen(false); navigate('/premium'); }}>Gestion premium</button>}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>

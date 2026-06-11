@@ -10,6 +10,7 @@ from .serializers import DocumentSerializer
 from apps.journal.models import JournalActivite, log
 from apps.users.models import ParametresValidation, Utilisateur
 from apps.notifications.models import Notification, notifier
+from apps.premium.services import PremiumAccessDenied, grant_document_download
 
 
 class CanValidateDocument(permissions.BasePermission):
@@ -146,6 +147,15 @@ class DocumentDownloadView(APIView):
         doc = get_object_or_404(Document, pk=pk)
         if doc.statut != Document.Statut.VALIDE and request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
             return Response({'detail': 'Document non valide.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            grant_document_download(request.user, doc)
+        except PremiumAccessDenied as exc:
+            return Response({
+                'detail': exc.detail,
+                'code': exc.code,
+                'redirect': '/premium',
+            }, status=402)
+
         doc.nb_telechargements += 1
         doc.save(update_fields=['nb_telechargements'])
         log(request.user, JournalActivite.TypeAction.TELECHARGEMENT, f'Telechargement : {doc.titre}', request.META.get('REMOTE_ADDR'))

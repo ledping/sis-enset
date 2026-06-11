@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'apps.journal',
     'apps.messagerie',
     'apps.notifications',
+    'apps.premium',
 ]
  
 MIDDLEWARE = [

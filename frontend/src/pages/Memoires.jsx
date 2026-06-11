@@ -47,7 +47,7 @@ export default function Memoires() {
   const [form, setForm] = useState(initialForm);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const canSubmit = ['ENSEIGNANT', 'ADMIN', 'CHEF_DEPT', 'ETUDIANT'].includes(user?.role);
+  const canSubmit = ['ENSEIGNANT', 'ADMIN', 'CHEF_DEPT'].includes(user?.role);
   const canDelete = (memoire) => ['ADMIN', 'CHEF_DEPT'].includes(user?.role) || memoire.depose_par_id === user?.id || memoire.depose_par_detail?.id === user?.id;
 
   useEffect(() => {
@@ -148,13 +148,22 @@ export default function Memoires() {
   };
 
   const handleDownload = async (id, titre) => {
-    const response = await api.get(`/memoires/${id}/dl/`, { responseType: 'blob' });
-    const url = URL.createObjectURL(response.data);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${titre}.pdf`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    try {
+      const response = await api.get(`/memoires/${id}/dl/`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${titre}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setMessage('Téléchargement lancé.');
+    } catch (error) {
+      if (error.response?.status === 402) {
+        setMessage(error.response.data?.detail || 'Crédit mémoire requis. Ouvrez Accès premium pour acheter un pack mémoire.');
+      } else {
+        setMessage('Téléchargement impossible.');
+      }
+    }
   };
 
   const handleDelete = async (memoire) => {
@@ -245,7 +254,7 @@ export default function Memoires() {
                     </Link>
                     {memoire.fichier_pdf && (
                       <button className="btn btn-primary btn-sm" type="button" onClick={() => void handleDownload(memoire.id, memoire.titre)}>
-                        <Download size={15} /> PDF
+                        <Download size={15} /> Débloquer PDF
                       </button>
                     )}
                     {canDelete(memoire) && (

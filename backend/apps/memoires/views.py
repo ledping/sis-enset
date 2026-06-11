@@ -2,6 +2,7 @@ from django.db.models import Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import filters, generics, permissions, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,6 +11,7 @@ from .serializers import MemoireSerializer
 from apps.journal.models import JournalActivite, log
 from apps.users.models import ParametresValidation, Utilisateur
 from apps.notifications.models import Notification, notifier
+from apps.premium.services import PremiumAccessDenied, grant_memoire_download
 
 
 class CanValidateMemoire(permissions.BasePermission):
@@ -57,6 +59,8 @@ class MemoireListCreateView(generics.ListCreateAPIView):
         return qs
 
     def perform_create(self, serializer):
+        if self.request.user.role == Utilisateur.Role.ETUDIANT:
+            raise PermissionDenied('Le dépôt de mémoire est réservé aux enseignants, chefs de département et administrateurs.')
         memoire = serializer.save(statut=Memoire.Statut.SOUMIS)
         params = ParametresValidation.get_solo()
         if params.prevalidation_auto_memoires and memoire.est_complet_pour_prevalidation:
@@ -135,6 +139,15 @@ class MemoireDownloadView(APIView):
         memoire = get_object_or_404(Memoire, pk=pk)
         if memoire.statut != Memoire.Statut.VALIDE and request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
             return Response({'detail': 'Memoire non archive.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            grant_memoire_download(request.user, memoire)
+        except PremiumAccessDenied as exc:
+            return Response({
+                'detail': exc.detail,
+                'code': exc.code,
+                'redirect': '/premium',
+            }, status=402)
+
         memoire.nb_telechargements += 1
         memoire.save(update_fields=['nb_telechargements'])
         log(request.user, JournalActivite.TypeAction.TELECHARGEMENT, f'Telechargement memoire : {memoire.titre}', request.META.get('REMOTE_ADDR'))

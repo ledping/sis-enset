@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, FilePlus2, Search, Trash2 } from 'lucide-react';
+import { CreditCard, Download, FilePlus2, Search, Trash2 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../contexts/useAuth';
 import Spinner from '../components/Spinner';
@@ -28,8 +28,10 @@ export default function Documents() {
   const [form, setForm] = useState({ titre: '', type_doc: 'COURS', description: '', fichier: null, filiere: '', niveau: '', annee_academique: '' });
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
+  const [premiumInfo, setPremiumInfo] = useState(null);
 
   const canUpload = ['ENSEIGNANT', 'ADMIN', 'CHEF_DEPT'].includes(user?.role);
+  const isStudent = user?.role === 'ETUDIANT';
   const canDelete = (doc) => ['ADMIN', 'CHEF_DEPT'].includes(user?.role) || doc.auteur_id === user?.id || doc.auteur_detail?.id === user?.id;
 
   const [reloadKey, setReloadKey] = useState(0);
@@ -68,6 +70,24 @@ export default function Documents() {
     };
   }, [search, typeFilter, reloadKey]);
 
+  useEffect(() => {
+    if (!isStudent) {
+      return undefined;
+    }
+
+    let ignore = false;
+    api.get('/premium/me/')
+      .then((response) => {
+        if (!ignore) setPremiumInfo(response.data.summary);
+      })
+      .catch(() => {
+        if (!ignore) setPremiumInfo(null);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [isStudent, reloadKey]);
+
   const handleUpload = async (event) => {
     event.preventDefault();
     if (!form.titre || !form.type_doc || !form.fichier) {
@@ -98,13 +118,22 @@ export default function Documents() {
   };
 
   const handleDownload = async (id, titre) => {
-    const response = await api.get(`/documents/${id}/dl/`, { responseType: 'blob' });
-    const url = URL.createObjectURL(response.data);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = titre;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    try {
+      const response = await api.get(`/documents/${id}/dl/`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = titre;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setReloadKey((current) => current + 1);
+    } catch (error) {
+      if (error.response?.status === 402) {
+        setMessage(error.response.data?.detail || 'Accès premium requis pour poursuivre les téléchargements.');
+      } else {
+        setMessage('Téléchargement impossible.');
+      }
+    }
   };
 
   const handleDelete = async (doc) => {
@@ -131,6 +160,14 @@ export default function Documents() {
       </div>
 
       {message && <div className="alert alert-info border-0 shadow-sm">{message}</div>}
+
+      {premiumInfo && (
+        <div className="premium-access-strip">
+          <span className="premium-access-chip"><Download size={15} /> Gratuits ce mois-ci : {premiumInfo.documents_gratuits_restants} / {premiumInfo.documents_gratuits_mois}</span>
+          <span className="premium-access-chip"><CreditCard size={15} /> Documents via crédits : {premiumInfo.telechargements_documents_credits}</span>
+          <a className="btn btn-sm btn-outline-primary ms-auto" href="/premium">Acheter des crédits</a>
+        </div>
+      )}
 
       <div className="filter-card">
         <div className="row g-2">

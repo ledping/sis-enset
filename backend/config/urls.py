@@ -13,4 +13,5 @@ urlpatterns = [
     path('api/messages/',       include('apps.messagerie.urls')),
     path('api/notifications/',  include('apps.notifications.urls')),
     path('api/sessions/',       include('apps.sessions_reseau.urls')),
+    path('api/premium/',        include('apps.premium.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
