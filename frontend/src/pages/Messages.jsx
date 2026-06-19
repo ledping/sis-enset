@@ -80,6 +80,13 @@ function formatDateTime(value) {
   return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+function contactPresence(contact) {
+  if (!contact) return 'Utilisateur SIS ENSET';
+  if (contact.en_ligne) return 'En ligne maintenant';
+  if (contact.dernier_acces) return `Vu ${formatDateTime(contact.dernier_acces)}`;
+  return contact.role || 'Hors ligne';
+}
+
 function formatFileSize(bytes = 0) {
   if (!bytes) return '0 Ko';
   if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} Ko`;
@@ -118,7 +125,12 @@ function getSupportedAudioType() {
 
 function Avatar({ user }) {
   const photo = avatarUrl(user);
-  return photo ? <img className="chat-avatar" src={photo} alt="" /> : <div className="chat-avatar chat-avatar-fallback">{initials(user)}</div>;
+  const statusClass = user?.en_ligne ? ' online' : '';
+  return (
+    <span className={`chat-avatar-wrap${statusClass}`}>
+      {photo ? <img className="chat-avatar" src={photo} alt="" /> : <div className="chat-avatar chat-avatar-fallback">{initials(user)}</div>}
+    </span>
+  );
 }
 
 function AttachmentPreview({ file, onRemove }) {
@@ -187,6 +199,7 @@ export default function Messages() {
   const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [sidebarMode, setSidebarMode] = useState('discussions');
   const [reloadKey, setReloadKey] = useState(0);
   const [attachments, setAttachments] = useState([]);
   const [voiceFile, setVoiceFile] = useState(null);
@@ -278,6 +291,22 @@ export default function Messages() {
         return bt - at;
       });
   }, [contactById, contacts, currentUserId, filter, messages, search]);
+
+  const contactDirectory = useMemo(() => contacts
+    .filter((contact) => {
+      const text = `${displayName(contact)} ${contact.role || ''} ${contact.username || ''} ${contact.email || ''}`.toLowerCase();
+      return text.includes(search.trim().toLowerCase());
+    })
+    .map((contact) => ({
+      id: String(contact.id),
+      contact,
+      lastMessage: null,
+      unread: 0,
+      directory: true,
+    }))
+    .sort((a, b) => Number(Boolean(b.contact?.en_ligne)) - Number(Boolean(a.contact?.en_ligne)) || displayName(a.contact).localeCompare(displayName(b.contact))), [contacts, search]);
+
+  const sidebarItems = sidebarMode === 'contacts' ? contactDirectory : conversations;
 
   const selectedConversation = conversations.find((item) => item.id === selectedContactId) || null;
   const selectedContact = selectedConversation?.contact || contactById.get(selectedContactId) || null;
@@ -509,7 +538,7 @@ export default function Messages() {
           <div className="chat-sidebar-header">
             <div className="chat-sidebar-title">
               <h2>Discussions</h2>
-              <span>{conversations.length} discussion(s)</span>
+              <span>{sidebarMode === 'contacts' ? `${contacts.length} contact(s)` : `${conversations.length} discussion(s)`}</span>
             </div>
             <div className="chat-sidebar-tools">
               {unreadTotal > 0 && <strong className="chat-total-unread">{unreadTotal}</strong>}
@@ -531,12 +560,13 @@ export default function Messages() {
           </div>
 
           <div className="chat-filter-row">
-            <button type="button" className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Toutes</button>
-            <button type="button" className={filter === 'unread' ? 'active' : ''} onClick={() => setFilter('unread')}>Non lues {unreadTotal}</button>
+            <button type="button" className={sidebarMode === 'discussions' && filter === 'all' ? 'active' : ''} onClick={() => { setSidebarMode('discussions'); setFilter('all'); }}>Discussions</button>
+            <button type="button" className={sidebarMode === 'discussions' && filter === 'unread' ? 'active' : ''} onClick={() => { setSidebarMode('discussions'); setFilter('unread'); }}>Non lues {unreadTotal}</button>
+            <button type="button" className={sidebarMode === 'contacts' ? 'active' : ''} onClick={() => { setSidebarMode('contacts'); setFilter('all'); }}>Contacts {contacts.length}</button>
           </div>
 
           <div className="chat-conversation-list">
-            {loading ? <Spinner label="Chargement des discussions..." /> : conversations.map((conversation) => (
+            {loading ? <Spinner label="Chargement des discussions..." /> : sidebarItems.map((conversation) => (
               <button
                 type="button"
                 key={conversation.id}
@@ -550,13 +580,13 @@ export default function Messages() {
                     <time>{formatTime(conversation.lastMessage?.created_at)}</time>
                   </div>
                   <div className="chat-contact-preview">
-                    <span>{messagePreview(conversation.lastMessage) || conversation.contact?.role || 'Nouveau contact'}</span>
+                    <span>{conversation.directory ? contactPresence(conversation.contact) : (messagePreview(conversation.lastMessage) || contactPresence(conversation.contact))}</span>
                     {conversation.unread > 0 && <b>{conversation.unread}</b>}
                   </div>
                 </div>
               </button>
             ))}
-            {!loading && conversations.length === 0 && <div className="chat-empty-side">Aucune discussion trouvée.</div>}
+            {!loading && sidebarItems.length === 0 && <div className="chat-empty-side">Aucun utilisateur trouvé.</div>}
           </div>
         </aside>
 
@@ -568,7 +598,7 @@ export default function Messages() {
                   <Avatar user={selectedContact} />
                   <div>
                     <strong>{displayName(selectedContact)}</strong>
-                    <span>{selectedContact.role || 'Utilisateur SIS ENSET'}</span>
+                    <span>{contactPresence(selectedContact)}</span>
                   </div>
                 </div>
                 <div className="chat-room-actions">
@@ -630,7 +660,7 @@ export default function Messages() {
                 ))}
               </div>
 
-              <form className="chat-composer" onSubmit={sendMessage}>
+              <form className={`chat-composer ${recording ? 'recording-active' : ''} ${voiceFile ? 'voice-ready-active' : ''}`} onSubmit={sendMessage}>
                 <input ref={documentInputRef} className="d-none" type="file" multiple accept={ACCEPTS.documents} onChange={(event) => { addFiles(event.target.files, 'documents'); event.target.value = ''; }} />
                 <input ref={imageInputRef} className="d-none" type="file" multiple accept={ACCEPTS.images} onChange={(event) => { addFiles(event.target.files, 'images'); event.target.value = ''; }} />
                 <input ref={audioInputRef} className="d-none" type="file" multiple accept={ACCEPTS.audios} onChange={(event) => { addFiles(event.target.files, 'audios'); event.target.value = ''; }} />
@@ -671,14 +701,14 @@ export default function Messages() {
                   onStop={stopRecording}
                   onCancel={cancelVoice}
                 />
-                <button className="send" type="submit" disabled={sending} title="Envoyer"><Send size={21} /></button>
+                {!recording && <button className="send" type="submit" disabled={sending} title="Envoyer"><Send size={21} /></button>}
               </form>
             </>
           ) : (
             <div className="chat-no-selection">
               <MessageCircle size={64} />
               <h2>Messagerie SIS ENSET</h2>
-              <p>Sélectionne une discussion à gauche pour envoyer un texte, un fichier ou un vocal.</p>
+              <p>Ouvre l’onglet Contacts pour démarrer une nouvelle discussion avec un utilisateur connecté ou hors ligne.</p>
             </div>
           )}
         </section>

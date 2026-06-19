@@ -1,4 +1,5 @@
 from django.db.models import Q, Count
+from django.utils import timezone
 from rest_framework import generics, permissions, parsers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -89,4 +90,11 @@ class MessageContactsView(APIView):
 
     def get(self, request):
         qs = Utilisateur.objects.filter(actif=True, is_active=True).exclude(id=request.user.id).order_by('role', 'last_name', 'first_name', 'username')
-        return Response(UtilisateurSerializer(qs, many=True, context={'request': request}).data)
+        data = UtilisateurSerializer(qs, many=True, context={'request': request}).data
+        now = timezone.now()
+        last_login_by_id = {user.id: user.last_login for user in qs}
+        for item in data:
+            last_login = last_login_by_id.get(item['id'])
+            item['dernier_acces'] = last_login.isoformat() if last_login else ''
+            item['en_ligne'] = bool(last_login and (now - last_login).total_seconds() <= 15 * 60)
+        return Response(data)

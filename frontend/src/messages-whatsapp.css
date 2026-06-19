@@ -1131,3 +1131,239 @@
     max-width: 180px;
   }
 }
+
+/* v9.3.3 - messagerie: annuaire utilisateurs + popovers toujours visibles */
+.chat-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.chat-avatar-wrap.online::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  bottom: 5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #10b981;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, .25);
+}
+
+.chat-filter-row {
+  scrollbar-width: thin;
+}
+
+.chat-filter-row button {
+  flex: 0 0 auto;
+}
+
+.chat-room-panel,
+.chat-composer,
+.chat-menu-anchor {
+  overflow: visible !important;
+}
+
+.chat-composer {
+  flex-wrap: nowrap;
+  padding-bottom: 14px;
+}
+
+.chat-composer > input:not([type='file']) {
+  min-width: 220px;
+}
+
+.chat-popover {
+  bottom: 64px;
+  z-index: 9999;
+}
+
+.attachment-popover {
+  left: 0;
+}
+
+.emoji-popover {
+  left: -58px;
+  width: min(320px, 88vw);
+  max-height: 260px;
+}
+
+.chat-contact-row.active .chat-avatar-wrap.online::after {
+  border-color: #e0f2fe;
+}
+
+@media (max-width: 1180px) {
+  .chat-composer {
+    flex-wrap: wrap;
+  }
+
+  .chat-composer > input:not([type='file']) {
+    flex: 1 1 320px;
+    min-width: 220px;
+  }
+
+  .voice-composer,
+  .voice-composer.ready {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 860px) {
+  .chat-shell {
+    overflow: hidden;
+  }
+
+  .chat-composer {
+    overflow: visible !important;
+  }
+
+  .chat-popover {
+    position: fixed;
+    left: 18px;
+    right: 18px;
+    bottom: 96px;
+    width: auto;
+    max-width: none;
+  }
+
+  .attachment-popover {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .emoji-popover {
+    left: 18px;
+  }
+}
+
+
+/* v9.3.4 - correction finale recorder + onglets + popovers avant deploiement campus */
+.chat-filter-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 6px 2px 10px;
+  scrollbar-width: thin;
+}
+
+.chat-filter-row button {
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.chat-composer.recording-active {
+  display: grid;
+  grid-template-columns: auto auto minmax(120px, 1fr) minmax(260px, 430px);
+  align-items: center;
+  gap: 10px;
+  overflow: visible !important;
+}
+
+.chat-composer.recording-active > input:not([type='file']) {
+  min-width: 120px;
+}
+
+.chat-composer.recording-active .voice-composer.recording {
+  justify-self: end;
+  width: 100%;
+  max-width: 430px;
+  min-width: 260px;
+  flex: none;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  padding: 7px 10px 7px 14px;
+}
+
+.chat-composer.recording-active .voice-composer.recording strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-composer.recording-active .voice-composer.recording .danger {
+  min-width: 108px;
+  padding-inline: 14px;
+}
+
+.chat-composer.voice-ready-active {
+  display: grid;
+  grid-template-columns: auto auto minmax(120px, 1fr) minmax(280px, 470px) auto;
+  align-items: center;
+  overflow: visible !important;
+}
+
+.chat-composer.voice-ready-active .voice-composer.ready {
+  width: 100%;
+  max-width: 470px;
+  min-width: 280px;
+}
+
+.chat-popover,
+.attachment-popover,
+.emoji-popover {
+  z-index: 20000 !important;
+}
+
+.chat-menu-anchor {
+  isolation: isolate;
+}
+
+@media (max-width: 1280px) {
+  .chat-composer.recording-active,
+  .chat-composer.voice-ready-active {
+    grid-template-columns: auto auto minmax(160px, 1fr) auto;
+  }
+
+  .chat-composer.recording-active .voice-composer.recording,
+  .chat-composer.voice-ready-active .voice-composer.ready {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    max-width: none;
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 740px) {
+  .chat-filter-row {
+    gap: 8px;
+  }
+
+  .chat-composer,
+  .chat-composer.recording-active,
+  .chat-composer.voice-ready-active {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    gap: 8px;
+    padding: 9px 10px 12px;
+  }
+
+  .chat-composer > input:not([type='file']) {
+    grid-column: 3;
+    min-width: 0;
+  }
+
+  .chat-composer.recording-active .voice-composer.recording,
+  .chat-composer.voice-ready-active .voice-composer.ready {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .chat-composer.recording-active .voice-composer.recording {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .chat-composer.recording-active .voice-composer.recording .voice-timer {
+    justify-self: end;
+  }
+
+  .chat-composer.recording-active .voice-composer.recording .danger {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: center;
+  }
+}
