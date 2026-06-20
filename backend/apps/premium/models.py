@@ -14,10 +14,13 @@ class PlanAcces(models.Model):
     type_plan = models.CharField(max_length=20, choices=TypePlan.choices, default=TypePlan.DOCUMENT)
     description = models.TextField(blank=True)
     prix = models.PositiveIntegerField(help_text='Prix en FCFA')
+    ancien_prix = models.PositiveIntegerField(null=True, blank=True, help_text='Prix barré affiché en période promotionnelle')
     credits_documents = models.PositiveIntegerField(default=0, help_text='Nombre de telechargements documents accordes')
     credits_memoires = models.PositiveIntegerField(default=0, help_text='Nombre de telechargements memoires accordes')
+    badge = models.CharField(max_length=80, blank=True, help_text='Exemple : Promo, Recommande, Lancement')
     actif = models.BooleanField(default=True)
     ordre = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -37,6 +40,9 @@ class ParametresPremium(models.Model):
         blank=True,
         default='Apres paiement, renseignez la reference de transaction et ajoutez une capture ou un recu comme preuve.'
     )
+    quota_documents_gratuits_mensuel = models.PositiveIntegerField(default=3)
+    pourcentage_auteur = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('30.00'))
+    message_annonce = models.TextField(blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -50,6 +56,45 @@ class ParametresPremium(models.Model):
     def get_solo(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class PromotionPremium(models.Model):
+    titre = models.CharField(max_length=150)
+    message = models.TextField()
+    date_debut = models.DateTimeField(null=True, blank=True)
+    date_fin = models.DateTimeField(null=True, blank=True)
+    memoires_gratuits = models.BooleanField(default=False)
+    documents_gratuits = models.BooleanField(default=False)
+    actif = models.BooleanField(default=True)
+    cree_par = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='promotions_premium_creees')
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-actif', '-created_at']
+        verbose_name = 'Promotion premium'
+        verbose_name_plural = 'Promotions premium'
+
+    def __str__(self):
+        return self.titre
+
+    def est_active(self):
+        now = timezone.now()
+        if not self.actif:
+            return False
+        if self.date_debut and now < self.date_debut:
+            return False
+        if self.date_fin and now > self.date_fin:
+            return False
+        return True
+
+    @classmethod
+    def active(cls):
+        now = timezone.now()
+        return cls.objects.filter(actif=True).filter(
+            models.Q(date_debut__isnull=True) | models.Q(date_debut__lte=now),
+            models.Q(date_fin__isnull=True) | models.Q(date_fin__gte=now),
+        ).order_by('-created_at')
 
 
 class PortefeuilleUtilisateur(models.Model):
@@ -184,6 +229,9 @@ class AuditPremium(models.Model):
         RECU_TELECHARGE = 'RECU_TELECHARGE', 'Recu telecharge'
         EXPORT_PAIEMENTS = 'EXPORT_PAIEMENTS', 'Export paiements'
         CONSULTATION_STATS = 'CONSULTATION_STATS', 'Consultation statistiques'
+        PLAN_MODIFIE = 'PLAN_MODIFIE', 'Plan premium modifie'
+        PROMOTION_CREEE = 'PROMOTION_CREEE', 'Promotion creee'
+        PROMOTION_MODIFIEE = 'PROMOTION_MODIFIEE', 'Promotion modifiee'
 
     acteur = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='audits_premium_effectues')
     utilisateur_cible = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='audits_premium_subis')

@@ -3,9 +3,8 @@ from django.db import transaction
 from django.db.models import Count, Sum
 from django.utils import timezone
 from apps.users.models import Utilisateur
-from .models import AchatMemoire, HistoriqueTelechargement, PortefeuilleUtilisateur
+from .models import AchatMemoire, HistoriqueTelechargement, ParametresPremium, PortefeuilleUtilisateur, PromotionPremium
 
-DOCUMENTS_GRATUITS_MOIS = 3
 PRIX_MEMOIRE_DEFAUT = 500
 POURCENTAGE_AUTEUR_DEFAUT = 30
 
@@ -29,6 +28,23 @@ def is_privileged(user):
     return bool(user and user.is_authenticated and user.role in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT, Utilisateur.Role.ENSEIGNANT])
 
 
+def active_promotion():
+    return PromotionPremium.active().first()
+
+
+def premium_rules():
+    params = ParametresPremium.get_solo()
+    promo = active_promotion()
+    return {
+        'params': params,
+        'promotion': promo,
+        'quota_documents': params.quota_documents_gratuits_mensuel,
+        'documents_gratuits_promo': bool(promo and promo.documents_gratuits),
+        'memoires_gratuits_promo': bool(promo and promo.memoires_gratuits),
+        'pourcentage_auteur': params.pourcentage_auteur,
+    }
+
+
 def month_bounds(now=None):
     now = now or timezone.now()
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -45,6 +61,7 @@ def free_document_downloads_used(user):
         utilisateur=user,
         type_ressource=HistoriqueTelechargement.TypeRessource.DOCUMENT,
         gratuit=True,
+        commentaire__icontains='Quota gratuit',
         created_at__gte=start,
         created_at__lt=end,
     ).count()
@@ -52,20 +69,36 @@ def free_document_downloads_used(user):
 
 def premium_summary(user):
     wallet = PortefeuilleUtilisateur.get_for_user(user)
+    rules = premium_rules()
     used = free_document_downloads_used(user)
-    remaining = max(DOCUMENTS_GRATUITS_MOIS - used, 0)
+    quota = rules['quota_documents']
+    remaining = max(quota - used, 0)
+    promo = rules['promotion']
     return {
-        'documents_gratuits_mois': DOCUMENTS_GRATUITS_MOIS,
+        'documents_gratuits_mois': quota,
         'documents_gratuits_utilises': used,
         'documents_gratuits_restants': remaining,
         'telechargements_documents_credits': wallet.telechargements_documents_credits,
         'credits_memoires': wallet.credits_memoires,
         'total_depense': wallet.total_depense,
+        'promotion_active': bool(promo),
+        'promotion': {
+            'id': promo.id,
+            'titre': promo.titre,
+            'message': promo.message,
+            'memoires_gratuits': promo.memoires_gratuits,
+            'documents_gratuits': promo.documents_gratuits,
+            'date_fin': promo.date_fin,
+        } if promo else None,
+        'documents_gratuits_promo': rules['documents_gratuits_promo'],
+        'memoires_gratuits_promo': rules['memoires_gratuits_promo'],
     }
 
 
 @transaction.atomic
 def grant_document_download(user, document):
+    rules = premium_rules()
+    promo = rules['promotion']
     if is_privileged(user):
         HistoriqueTelechargement.objects.create(
             utilisateur=user,
@@ -76,8 +109,19 @@ def grant_document_download(user, document):
         )
         return PremiumDecision(True, 'Acces institutionnel')
 
+    if rules['documents_gratuits_promo']:
+        HistoriqueTelechargement.objects.create(
+            utilisateur=user,
+            type_ressource=HistoriqueTelechargement.TypeRessource.DOCUMENT,
+            document=document,
+            gratuit=True,
+            commentaire=f'Promotion active : {promo.titre}',
+        )
+        return PremiumDecision(True, 'Document gratuit pendant la promotion')
+
     used = free_document_downloads_used(user)
-    if used < DOCUMENTS_GRATUITS_MOIS:
+    quota = rules['quota_documents']
+    if used < quota:
         HistoriqueTelechargement.objects.create(
             utilisateur=user,
             type_ressource=HistoriqueTelechargement.TypeRessource.DOCUMENT,
@@ -85,7 +129,7 @@ def grant_document_download(user, document):
             gratuit=True,
             commentaire='Quota gratuit mensuel',
         )
-        return PremiumDecision(True, 'Quota gratuit mensuel', free_remaining=DOCUMENTS_GRATUITS_MOIS - used - 1)
+        return PremiumDecision(True, 'Quota gratuit mensuel', free_remaining=quota - used - 1)
 
     wallet = PortefeuilleUtilisateur.get_for_user(user)
     if wallet.telechargements_documents_credits > 0:
@@ -100,11 +144,13 @@ def grant_document_download(user, document):
         )
         return PremiumDecision(True, 'Credit document utilise')
 
-    raise PremiumAccessDenied('Vous avez atteint votre limite gratuite de 3 documents ce mois-ci. Achetez un credit document pour debloquer 5 telechargements supplementaires.', 'document_credit_required')
+    raise PremiumAccessDenied(f'Vous avez atteint votre limite gratuite de {quota} documents ce mois-ci. Achetez un pack document pour debloquer des telechargements supplementaires.', 'document_credit_required')
 
 
 @transaction.atomic
 def grant_memoire_download(user, memoire):
+    rules = premium_rules()
+    promo = rules['promotion']
     if is_privileged(user):
         HistoriqueTelechargement.objects.create(
             utilisateur=user,
@@ -114,6 +160,16 @@ def grant_memoire_download(user, memoire):
             commentaire='Acces institutionnel',
         )
         return PremiumDecision(True, 'Acces institutionnel')
+
+    if rules['memoires_gratuits_promo']:
+        HistoriqueTelechargement.objects.create(
+            utilisateur=user,
+            type_ressource=HistoriqueTelechargement.TypeRessource.MEMOIRE,
+            memoire=memoire,
+            gratuit=True,
+            commentaire=f'Promotion active : {promo.titre}',
+        )
+        return PremiumDecision(True, 'Memoire gratuit pendant la promotion')
 
     if AchatMemoire.objects.filter(utilisateur=user, memoire=memoire).exists():
         HistoriqueTelechargement.objects.create(
@@ -133,7 +189,7 @@ def grant_memoire_download(user, memoire):
             utilisateur=user,
             memoire=memoire,
             montant_estime=PRIX_MEMOIRE_DEFAUT,
-            pourcentage_auteur=POURCENTAGE_AUTEUR_DEFAUT,
+            pourcentage_auteur=rules['pourcentage_auteur'] or POURCENTAGE_AUTEUR_DEFAUT,
             credit_utilise=True,
         )
         HistoriqueTelechargement.objects.create(

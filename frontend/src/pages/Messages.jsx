@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
+  Camera,
   Check,
   CheckCheck,
   Download,
@@ -11,6 +12,10 @@ import {
   Image as ImageIcon,
   MessageCircle,
   Mic,
+  MicOff,
+  Phone,
+  PhoneCall,
+  PhoneOff,
   Paperclip,
   PanelLeftClose,
   PanelLeftOpen,
@@ -18,6 +23,8 @@ import {
   Send,
   Smile,
   Square,
+  Video,
+  VideoOff,
   Trash2,
   X,
 } from 'lucide-react';
@@ -69,22 +76,71 @@ function userIdFromMessage(message, field) {
   return String(message.destinataire_detail?.id || message.destinataire || '');
 }
 
+const DOUALA_TIME_ZONE = 'Africa/Douala';
+
+function parseDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function formatTime(value) {
-  if (!value) return '';
-  return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const date = parseDate(value);
+  if (!date) return '';
+  return new Intl.DateTimeFormat('fr-CM', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: DOUALA_TIME_ZONE,
+  }).format(date);
+}
+
+function formatFullDate(value) {
+  const date = parseDate(value);
+  if (!date) return '';
+  return new Intl.DateTimeFormat('fr-CM', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: DOUALA_TIME_ZONE,
+  }).format(date);
 }
 
 function formatDateTime(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  const date = parseDate(value);
+  if (!date) return '';
+  return `${formatFullDate(date)} à ${formatTime(date)}`;
+}
+
+function localDayKey(value) {
+  const date = parseDate(value);
+  if (!date) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: DOUALA_TIME_ZONE,
+  }).format(date);
+}
+
+function presenceLabel(value) {
+  const date = parseDate(value);
+  if (!date) return 'Aucune activité récente';
+  const today = localDayKey(new Date());
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = localDayKey(yesterdayDate);
+  const target = localDayKey(date);
+  const time = formatTime(date);
+  if (target === today) return `Vu aujourd’hui à ${time}`;
+  if (target === yesterday) return `Vu hier à ${time}`;
+  return `Vu le ${formatFullDate(date)} à ${time}`;
 }
 
 function contactPresence(contact) {
   if (!contact) return 'Utilisateur SIS ENSET';
   if (contact.en_ligne) return 'En ligne maintenant';
-  if (contact.dernier_acces) return `Vu ${formatDateTime(contact.dernier_acces)}`;
-  return contact.role || 'Hors ligne';
+  if (contact.dernier_acces) return presenceLabel(contact.dernier_acces);
+  return contact.role || 'Aucune activité récente';
 }
 
 function formatFileSize(bytes = 0) {
@@ -188,6 +244,100 @@ function VoiceRecorder({ recording, elapsed, voiceFile, voicePreviewUrl, onStart
   );
 }
 
+
+function buildPeerConnection({ onRemoteStream, onIceCandidate, onConnectionState }) {
+  const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  peer.onicecandidate = (event) => {
+    if (event.candidate) onIceCandidate(event.candidate.toJSON());
+  };
+  peer.ontrack = (event) => {
+    const [stream] = event.streams;
+    if (stream) onRemoteStream(stream);
+  };
+  peer.onconnectionstatechange = () => onConnectionState(peer.connectionState);
+  return peer;
+}
+
+function CallPanel({
+  callState,
+  selectedContact,
+  currentUserId,
+  localVideoRef,
+  remoteVideoRef,
+  remoteAudioRef,
+  onStart,
+  onAccept,
+  onRefuse,
+  onEnd,
+  onToggleMute,
+  onToggleVideo,
+}) {
+  const active = callState.visible && callState.appel;
+  const contact = callState.contact || selectedContact;
+  const incoming = callState.direction === 'incoming';
+  const videoCall = callState.type_appel === 'video';
+
+  return (
+    <>
+      <div className="chat-call-actions">
+        <button type="button" onClick={() => onStart('audio')} title="Appel audio"><Phone size={20} /></button>
+        <button type="button" onClick={() => onStart('video')} title="Appel vidéo"><Video size={20} /></button>
+      </div>
+      {active && (
+        <div className="call-overlay" role="dialog" aria-modal="true">
+          <div className={`call-card ${videoCall ? 'video' : 'audio'}`}>
+            <div className="call-card-header">
+              <Avatar user={contact} />
+              <div>
+                <span>{incoming && callState.status === 'ringing' ? 'Appel entrant' : callState.statusText}</span>
+                <strong>{displayName(contact)}</strong>
+                <small>{videoCall ? 'Vidéo interne SIS ENSET' : 'Audio interne SIS ENSET'}</small>
+              </div>
+            </div>
+
+            <audio ref={remoteAudioRef} autoPlay playsInline className="call-remote-audio" />
+
+            {videoCall ? (
+              <div className="call-video-grid">
+                <video ref={remoteVideoRef} autoPlay playsInline className="remote-video" />
+                <video ref={localVideoRef} autoPlay muted playsInline className="local-video" />
+              </div>
+            ) : (
+              <div className="call-audio-stage">
+                <div className="call-avatar-large"><Avatar user={contact} /></div>
+                <p>{callState.statusText}</p>
+              </div>
+            )}
+
+            {incoming && callState.status === 'ringing' ? (
+              <div className="call-controls incoming">
+                <button type="button" className="danger" onClick={onRefuse}><PhoneOff size={20} /> Refuser</button>
+                <button type="button" className="success" onClick={onAccept}><PhoneCall size={20} /> Accepter</button>
+              </div>
+            ) : (
+              <div className="call-controls">
+                <button type="button" onClick={onToggleMute} className={callState.muted ? 'active' : ''} title="Micro">
+                  {callState.muted ? <MicOff size={20} /> : <Mic size={20} />}
+                </button>
+                {videoCall && (
+                  <button type="button" onClick={onToggleVideo} className={callState.videoOff ? 'active' : ''} title="Caméra">
+                    {callState.videoOff ? <VideoOff size={20} /> : <Video size={20} />}
+                  </button>
+                )}
+                <button type="button" className="danger round" onClick={onEnd}><PhoneOff size={22} /></button>
+              </div>
+            )}
+            <div className="call-note">
+              Les appels WebRTC fonctionnent idéalement sur localhost ou HTTPS. Sur simple HTTP réseau, le navigateur peut limiter micro/caméra.
+            </div>
+            <span className="call-user-id">Session utilisateur : {currentUserId}</span>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Messages() {
   const currentUser = useMemo(() => getCurrentUser(), []);
   const currentUserId = String(currentUser?.id || '');
@@ -209,16 +359,46 @@ export default function Messages() {
   const [sending, setSending] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraStreamReady, setCameraStreamReady] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState('environment');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const documentInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const audioInputRef = useRef(null);
   const archiveInputRef = useRef(null);
+  const cameraVideoRef = useRef(null);
+  const cameraCanvasRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const cameraStreamRef = useRef(null);
   const bottomRef = useRef(null);
   const draftInputRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
+  const callPeerRef = useRef(null);
+  const callLocalStreamRef = useRef(null);
+  const callRemoteStreamRef = useRef(null);
+  const activeCallRef = useRef(null);
+  const makingOfferRef = useRef(false);
+  const audioContextRef = useRef(null);
+  const incomingRingtoneRef = useRef(null);
+  const outgoingRingtoneRef = useRef(null);
+  const firstMessageLoadRef = useRef(true);
+  const lastMessageSoundAtRef = useRef(0);
+  const [callState, setCallState] = useState({
+    visible: false,
+    appel: null,
+    contact: null,
+    direction: '',
+    type_appel: 'audio',
+    status: 'idle',
+    statusText: '',
+    muted: false,
+    videoOff: false,
+  });
 
   useEffect(() => () => {
     if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
@@ -233,21 +413,145 @@ export default function Messages() {
   }, []);
 
   useEffect(() => {
-    let ignore = false;
-    api.get('/messages/', { params: { box: 'all' } })
-      .then((response) => { if (!ignore) setMessages(asList(response.data)); })
-      .catch(() => { if (!ignore) setNotice('Impossible de charger les messages.'); })
-      .finally(() => { if (!ignore) setLoading(false); });
-    return () => { ignore = true; };
-  }, [reloadKey]);
-
-  useEffect(() => {
     if (!recording) return undefined;
     const timer = window.setInterval(() => {
       setElapsed((value) => value + 1);
     }, 1000);
     return () => window.clearInterval(timer);
   }, [recording]);
+
+  const ensureAudioContext = async () => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    if (!audioContextRef.current) audioContextRef.current = new AudioContextClass();
+    if (audioContextRef.current.state === 'suspended') {
+      try { await audioContextRef.current.resume(); } catch { /* le navigateur peut encore bloquer le son */ }
+    }
+    return audioContextRef.current;
+  };
+
+  const playTone = async (frequency, duration = 0.12, volume = 0.08, delay = 0) => {
+    const context = await ensureAudioContext();
+    if (!context) return;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const startAt = context.currentTime + delay;
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(frequency, startAt);
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + duration + 0.04);
+  };
+
+  const playMessageSound = () => {
+    const now = Date.now();
+    if (now - lastMessageSoundAtRef.current < 1200) return;
+    lastMessageSoundAtRef.current = now;
+    void playTone(880, 0.08, 0.06, 0);
+    void playTone(1174, 0.09, 0.05, 0.12);
+    if (navigator.vibrate) navigator.vibrate(80);
+  };
+
+  const playRingPattern = () => {
+    void playTone(740, 0.16, 0.07, 0);
+    void playTone(930, 0.16, 0.06, 0.22);
+    void playTone(740, 0.16, 0.07, 0.44);
+  };
+
+  const startIncomingRingtone = () => {
+    if (incomingRingtoneRef.current) return;
+    playRingPattern();
+    if (navigator.vibrate) navigator.vibrate([260, 120, 260]);
+    incomingRingtoneRef.current = window.setInterval(() => {
+      playRingPattern();
+      if (navigator.vibrate) navigator.vibrate([260, 120, 260]);
+    }, 1600);
+  };
+
+  const stopIncomingRingtone = () => {
+    if (incomingRingtoneRef.current) {
+      window.clearInterval(incomingRingtoneRef.current);
+      incomingRingtoneRef.current = null;
+    }
+  };
+
+  const startOutgoingTone = () => {
+    if (outgoingRingtoneRef.current) return;
+    const ringOut = () => { void playTone(520, 0.12, 0.045, 0); };
+    ringOut();
+    outgoingRingtoneRef.current = window.setInterval(ringOut, 1800);
+  };
+
+  const stopOutgoingTone = () => {
+    if (outgoingRingtoneRef.current) {
+      window.clearInterval(outgoingRingtoneRef.current);
+      outgoingRingtoneRef.current = null;
+    }
+  };
+
+  const stopAllCallSounds = () => {
+    stopIncomingRingtone();
+    stopOutgoingTone();
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchMessages = async ({ silent = false } = {}) => {
+      try {
+        const response = await api.get('/messages/', { params: { box: 'all' } });
+        const nextMessages = asList(response.data);
+        if (cancelled) return;
+
+        setMessages((currentMessages) => {
+          const knownIds = new Set(currentMessages.map((item) => String(item.id)));
+          const hasNewIncoming = nextMessages.some((item) => (
+            !knownIds.has(String(item.id)) && userIdFromMessage(item, 'expediteur') !== currentUserId
+          ));
+          if (!firstMessageLoadRef.current && hasNewIncoming) {
+            playMessageSound();
+            window.dispatchEvent(new Event('sis:messages-updated'));
+            window.dispatchEvent(new Event('sis:notifications-updated'));
+          }
+          firstMessageLoadRef.current = false;
+          return nextMessages;
+        });
+        setLoading(false);
+      } catch {
+        if (!cancelled && !silent) setNotice('Impossible de charger les messages.');
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    const first = window.setTimeout(() => { void fetchMessages(); }, 0);
+    const timer = window.setInterval(() => { void fetchMessages({ silent: true }); }, 2200);
+    const refreshNow = () => { void fetchMessages({ silent: true }); };
+    window.addEventListener('sis:force-messages-refresh', refreshNow);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+      window.removeEventListener('sis:force-messages-refresh', refreshNow);
+    };
+    // Polling leger: les sons et compteurs utilisent des refs pour eviter de relancer l'intervalle a chaque rendu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId, reloadKey]);
+
+  useEffect(() => {
+    const unlock = () => { void ensureAudioContext(); };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    // L'audio est initialisé après la première interaction utilisateur pour respecter les règles du navigateur.
+  }, []);
 
   const contactById = useMemo(() => {
     const map = new Map();
@@ -373,6 +677,98 @@ export default function Messages() {
     setShowAttachMenu(false);
   };
 
+
+  const attachCameraStream = useCallback(() => {
+    const video = cameraVideoRef.current;
+    const stream = cameraStreamRef.current;
+    if (!video || !stream) return;
+    if (video.srcObject !== stream) video.srcObject = stream;
+    const playPromise = video.play?.();
+    if (playPromise?.catch) playPromise.catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (cameraOpen && cameraStreamReady) attachCameraStream();
+  }, [attachCameraStream, cameraOpen, cameraStreamReady]);
+
+  const stopCameraCapture = () => {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+    setCameraStreamReady(false);
+    if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null;
+  };
+
+  const openCameraCapture = async (facing = cameraFacing) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setNotice("Ce navigateur ne supporte pas la prise de photo directe.");
+      return;
+    }
+    try {
+      setShowAttachMenu(false);
+      stopCameraCapture();
+      setCameraOpen(true);
+      setCameraFacing(facing);
+      setNotice('Ouverture de la caméra...');
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
+      cameraStreamRef.current = stream;
+      setCameraStreamReady(true);
+      window.setTimeout(attachCameraStream, 80);
+      setNotice(facing === 'user' ? 'Caméra avant prête. Cadre la photo puis capture.' : 'Caméra arrière prête. Cadre la photo puis capture.');
+    } catch {
+      stopCameraCapture();
+      setCameraOpen(false);
+      setNotice("Caméra inaccessible. Autorise la caméra ou utilise l'option Image pour choisir une photo.");
+    }
+  };
+
+  const switchCameraFacing = () => {
+    const nextFacing = cameraFacing === 'user' ? 'environment' : 'user';
+    void openCameraCapture(nextFacing);
+  };
+
+  const closeCameraCapture = () => {
+    stopCameraCapture();
+    setCameraOpen(false);
+    setNotice('');
+  };
+
+  const capturePhoto = () => {
+    const video = cameraVideoRef.current;
+    const canvas = cameraCanvasRef.current;
+    if (!video || !canvas || !cameraStreamReady) {
+      setNotice('La caméra n’est pas encore prête. Patiente une seconde puis réessaie.');
+      return;
+    }
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+    if (!width || !height) {
+      setNotice('Image caméra indisponible. Réessaie ou choisis une photo depuis ton téléphone.');
+      return;
+    }
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    context.drawImage(video, 0, 0, width, height);
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        setNotice('Impossible de générer la photo. Réessaie.');
+        return;
+      }
+      const file = new File([blob], `photo_message_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      addFiles([file], 'images');
+      closeCameraCapture();
+      setNotice('Photo prête à envoyer. Ajoute un message si besoin puis clique sur envoyer.');
+    }, 'image/jpeg', 0.9);
+  };
+
   const removeAttachment = (index) => {
     setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index));
   };
@@ -480,6 +876,288 @@ export default function Messages() {
     setNotice('');
   };
 
+  const updateVideoElements = () => {
+    window.setTimeout(() => {
+      if (localVideoRef.current && callLocalStreamRef.current) localVideoRef.current.srcObject = callLocalStreamRef.current;
+      if (remoteVideoRef.current && callRemoteStreamRef.current) remoteVideoRef.current.srcObject = callRemoteStreamRef.current;
+      if (remoteAudioRef.current && callRemoteStreamRef.current) {
+        remoteAudioRef.current.srcObject = callRemoteStreamRef.current;
+        const playPromise = remoteAudioRef.current.play?.();
+        if (playPromise?.catch) playPromise.catch(() => { /* lecture audio bloquee tant que la page n a pas recu d interaction */ });
+      }
+    }, 0);
+  };
+
+  const closeLocalCallMedia = () => {
+    callLocalStreamRef.current?.getTracks().forEach((track) => track.stop());
+    callLocalStreamRef.current = null;
+    callRemoteStreamRef.current = null;
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+  };
+
+  const cleanupPeerConnection = () => {
+    try { callPeerRef.current?.close(); } catch { /* ignore */ }
+    callPeerRef.current = null;
+    makingOfferRef.current = false;
+  };
+
+  const resetCallUi = (message = '') => {
+    stopAllCallSounds();
+    cleanupPeerConnection();
+    closeLocalCallMedia();
+    activeCallRef.current = null;
+    setCallState({
+      visible: false,
+      appel: null,
+      contact: null,
+      direction: '',
+      type_appel: 'audio',
+      status: 'idle',
+      statusText: '',
+      muted: false,
+      videoOff: false,
+    });
+    if (message) setNotice(message);
+  };
+
+  const sendCallSignal = async (appelId, type_signal, payload) => {
+    await api.post(`/appels/${appelId}/signal/`, { type_signal, payload });
+  };
+
+  const ensureLocalCallStream = async (typeAppel) => {
+    if (callLocalStreamRef.current) return callLocalStreamRef.current;
+    const constraints = typeAppel === 'video'
+      ? { audio: { echoCancellation: true, noiseSuppression: true }, video: { width: { ideal: 960 }, height: { ideal: 540 } } }
+      : { audio: { echoCancellation: true, noiseSuppression: true }, video: false };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    callLocalStreamRef.current = stream;
+    updateVideoElements();
+    return stream;
+  };
+
+  const createCallPeer = async (appel, typeAppel) => {
+    cleanupPeerConnection();
+    const peer = buildPeerConnection({
+      onRemoteStream: (stream) => {
+        callRemoteStreamRef.current = stream;
+        updateVideoElements();
+        setCallState((current) => ({ ...current, status: 'connected', statusText: 'Appel connecté' }));
+      },
+      onIceCandidate: (candidate) => {
+        void sendCallSignal(appel.id, 'ice', { candidate });
+      },
+      onConnectionState: (state) => {
+        if (['failed', 'disconnected', 'closed'].includes(state)) {
+          setCallState((current) => ({ ...current, statusText: state === 'failed' ? 'Connexion instable' : current.statusText }));
+        }
+      },
+    });
+    const stream = await ensureLocalCallStream(typeAppel);
+    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+    callPeerRef.current = peer;
+    return peer;
+  };
+
+  const startInternalCall = async (typeAppel) => {
+    if (!selectedContactId || !selectedContact) {
+      setNotice('Choisis un contact avant de lancer un appel.');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
+      setNotice('Ce navigateur ne supporte pas les appels WebRTC.');
+      return;
+    }
+    try {
+      setNotice('Préparation de l’appel...');
+      const response = await api.post('/appels/start/', { destinataire: selectedContactId, type_appel: typeAppel });
+      const appel = response.data;
+      activeCallRef.current = appel;
+      setCallState({
+        visible: true,
+        appel,
+        contact: selectedContact,
+        direction: 'outgoing',
+        type_appel: typeAppel,
+        status: 'ringing',
+        statusText: 'Appel en cours...',
+        muted: false,
+        videoOff: false,
+      });
+      startOutgoingTone();
+      setNotice('Appel lancé. En attente de réponse.');
+    } catch (error) {
+      setNotice(error.response?.data?.detail || 'Impossible de lancer l’appel.');
+    }
+  };
+
+  const acceptIncomingCall = async () => {
+    const appel = activeCallRef.current;
+    if (!appel) return;
+    try {
+      setCallState((current) => ({ ...current, statusText: 'Activation du micro et de la caméra...' }));
+      await ensureLocalCallStream(appel.type_appel);
+      await api.post(`/appels/${appel.id}/respond/`, { action: 'accept' });
+      stopIncomingRingtone();
+      setCallState((current) => ({ ...current, status: 'accepted', statusText: 'Appel accepté. Connexion en cours...' }));
+    } catch (error) {
+      setNotice(error.response?.data?.detail || "Impossible d'accepter l'appel. Vérifie l'autorisation du micro/caméra.");
+    }
+  };
+
+  const refuseIncomingCall = async () => {
+    const appel = activeCallRef.current;
+    if (!appel) return;
+    try {
+      await api.post(`/appels/${appel.id}/respond/`, { action: 'refuse' });
+    } catch { /* ignore */ }
+    stopIncomingRingtone();
+    resetCallUi('Appel refusé.');
+  };
+
+  const endInternalCall = async () => {
+    const appel = activeCallRef.current;
+    if (appel?.id) {
+      try { await api.post(`/appels/${appel.id}/end/`); } catch { /* ignore */ }
+    }
+    resetCallUi('Appel terminé.');
+  };
+
+  const toggleCallMute = () => {
+    const stream = callLocalStreamRef.current;
+    if (!stream) return;
+    const nextMuted = !callState.muted;
+    stream.getAudioTracks().forEach((track) => { track.enabled = !nextMuted; });
+    setCallState((current) => ({ ...current, muted: nextMuted }));
+  };
+
+  const toggleCallVideo = () => {
+    const stream = callLocalStreamRef.current;
+    if (!stream) return;
+    const nextVideoOff = !callState.videoOff;
+    stream.getVideoTracks().forEach((track) => { track.enabled = !nextVideoOff; });
+    setCallState((current) => ({ ...current, videoOff: nextVideoOff }));
+  };
+
+  const handleIncomingCallSignal = (signal) => {
+    const appel = signal.appel_detail;
+    if (!appel || activeCallRef.current?.id) return;
+    const contact = appel.appelant_detail;
+    activeCallRef.current = appel;
+    setSelectedContactId(String(contact?.id || appel.appelant));
+    setCallState({
+      visible: true,
+      appel,
+      contact,
+      direction: 'incoming',
+      type_appel: appel.type_appel,
+      status: 'ringing',
+      statusText: 'Appel entrant',
+      muted: false,
+      videoOff: false,
+    });
+    startIncomingRingtone();
+    setNotice(`${displayName(contact)} vous appelle.`);
+  };
+
+  const handleAcceptedCallSignal = async (signal) => {
+    const appel = signal.appel_detail;
+    if (!appel || activeCallRef.current?.id !== appel.id) return;
+    try {
+      stopOutgoingTone();
+      setCallState((current) => ({ ...current, appel, status: 'accepted', statusText: 'Appel accepté. Connexion...' }));
+      const peer = await createCallPeer(appel, appel.type_appel);
+      makingOfferRef.current = true;
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      await sendCallSignal(appel.id, 'offer', peer.localDescription.toJSON());
+    } catch {
+      setNotice('Impossible de créer la connexion WebRTC. Vérifie le micro/caméra.');
+    } finally {
+      makingOfferRef.current = false;
+    }
+  };
+
+  const handleOfferSignal = async (signal) => {
+    const appel = signal.appel_detail;
+    if (!appel) return;
+    try {
+      activeCallRef.current = appel;
+      const peer = callPeerRef.current || await createCallPeer(appel, appel.type_appel);
+      await peer.setRemoteDescription(new RTCSessionDescription(signal.payload));
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+      await sendCallSignal(appel.id, 'answer', peer.localDescription.toJSON());
+      setCallState((current) => ({ ...current, appel, status: 'connecting', statusText: 'Connexion en cours...' }));
+    } catch {
+      setNotice('Impossible de répondre à l’appel WebRTC.');
+    }
+  };
+
+  const handleAnswerSignal = async (signal) => {
+    if (!callPeerRef.current) return;
+    try {
+      await callPeerRef.current.setRemoteDescription(new RTCSessionDescription(signal.payload));
+      setCallState((current) => ({ ...current, status: 'connecting', statusText: 'Connexion en cours...' }));
+    } catch {
+      setNotice('Réponse WebRTC invalide.');
+    }
+  };
+
+  const handleIceSignal = async (signal) => {
+    if (!callPeerRef.current || !signal.payload?.candidate) return;
+    try {
+      await callPeerRef.current.addIceCandidate(new RTCIceCandidate(signal.payload.candidate));
+    } catch { /* ignore invalid candidates */ }
+  };
+
+  const processCallSignal = async (signal) => {
+    if (signal.type_signal === 'incoming') return handleIncomingCallSignal(signal);
+    if (signal.type_signal === 'accepted') return handleAcceptedCallSignal(signal);
+    if (signal.type_signal === 'refused') return resetCallUi('Appel refusé.');
+    if (signal.type_signal === 'cancelled') return resetCallUi('Appel annulé.');
+    if (signal.type_signal === 'ended') return resetCallUi('Appel terminé.');
+    if (signal.type_signal === 'offer') return handleOfferSignal(signal);
+    if (signal.type_signal === 'answer') return handleAnswerSignal(signal);
+    if (signal.type_signal === 'ice') return handleIceSignal(signal);
+    return undefined;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response = await api.get('/appels/poll/');
+        const signals = response.data?.signals || [];
+        for (const signal of signals) {
+          if (!cancelled) await processCallSignal(signal);
+        }
+      } catch {
+        // silence: la messagerie reste utilisable même si le module appels est indisponible.
+      }
+    };
+    const first = window.setTimeout(() => { void poll(); }, 700);
+    const timer = window.setInterval(() => { void poll(); }, 1800);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+    };
+    // La signalisation WebRTC est volontairement pollée par minuteur interne.
+    // Les handlers lisent l'état courant via refs et setState fonctionnel pour éviter de redémarrer le polling à chaque rendu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => {
+    stopAllCallSounds();
+    stopCameraCapture();
+    cleanupPeerConnection();
+    closeLocalCallMedia();
+    // Nettoyage unique au démontage: les refs internes gardent l'état courant des sons et flux WebRTC.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const clearComposer = () => {
     setDraft('');
     setAttachments([]);
@@ -523,6 +1201,7 @@ export default function Messages() {
       }
       window.dispatchEvent(new Event('sis:messages-updated'));
       window.dispatchEvent(new Event('sis:notifications-updated'));
+      window.dispatchEvent(new Event('sis:force-messages-refresh'));
     } catch (error) {
       const data = error.response?.data;
       setNotice(data?.detail || data?.non_field_errors?.[0] || (data ? JSON.stringify(data) : 'Envoi impossible.'));
@@ -602,6 +1281,20 @@ export default function Messages() {
                   </div>
                 </div>
                 <div className="chat-room-actions">
+                  <CallPanel
+                    callState={callState}
+                    selectedContact={selectedContact}
+                    currentUserId={currentUserId}
+                    localVideoRef={localVideoRef}
+                    remoteVideoRef={remoteVideoRef}
+                    remoteAudioRef={remoteAudioRef}
+                    onStart={(typeAppel) => void startInternalCall(typeAppel)}
+                    onAccept={() => void acceptIncomingCall()}
+                    onRefuse={() => void refuseIncomingCall()}
+                    onEnd={() => void endInternalCall()}
+                    onToggleMute={toggleCallMute}
+                    onToggleVideo={toggleCallVideo}
+                  />
                   <button
                     type="button"
                     className="chat-room-sidebar-toggle"
@@ -611,7 +1304,6 @@ export default function Messages() {
                   >
                     {sidebarCollapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
                   </button>
-                  <MessageCircle size={22} />
                 </div>
               </header>
 
@@ -671,6 +1363,7 @@ export default function Messages() {
                   {showAttachMenu && (
                     <div className="chat-popover attachment-popover">
                       <button type="button" onClick={() => documentInputRef.current?.click()}><FileText size={18} /> Document</button>
+                      <button type="button" onClick={() => void openCameraCapture()}><Camera size={18} /> Caméra</button>
                       <button type="button" onClick={() => imageInputRef.current?.click()}><ImageIcon size={18} /> Image</button>
                       <button type="button" onClick={() => audioInputRef.current?.click()}><FileAudio size={18} /> Audio</button>
                       <button type="button" onClick={() => archiveInputRef.current?.click()}><Archive size={18} /> Archive</button>
@@ -712,6 +1405,42 @@ export default function Messages() {
             </div>
           )}
         </section>
+
+        {cameraOpen && (
+          <div className="camera-capture-overlay" role="dialog" aria-modal="true">
+            <div className="camera-capture-card">
+              <div className="camera-capture-header">
+                <div>
+                  <strong>Prendre une photo</strong>
+                  <span>La photo sera ajoutée comme image dans le message.</span>
+                </div>
+                <button type="button" onClick={closeCameraCapture} aria-label="Fermer"><X size={20} /></button>
+              </div>
+              <div className="camera-capture-preview">
+                {!cameraStreamReady && <div className="camera-capture-loading">Activation de la caméra...</div>}
+                <video
+                  ref={cameraVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  onLoadedMetadata={attachCameraStream}
+                  className="camera-capture-video"
+                />
+              </div>
+              <canvas ref={cameraCanvasRef} className="d-none" />
+              <div className="camera-capture-switch">
+                <button type="button" onClick={() => void openCameraCapture('user')} className={cameraFacing === 'user' ? 'active' : ''}>Caméra avant</button>
+                <button type="button" onClick={() => void openCameraCapture('environment')} className={cameraFacing === 'environment' ? 'active' : ''}>Caméra arrière</button>
+              </div>
+              <div className="camera-capture-actions">
+                <button type="button" className="ghost" onClick={closeCameraCapture}>Annuler</button>
+                <button type="button" className="ghost" onClick={switchCameraFacing}>Changer</button>
+                <button type="button" className="capture" onClick={capturePhoto} disabled={!cameraStreamReady}><Camera size={18} /> Capturer</button>
+              </div>
+              <p className="camera-capture-note">Sur smartphone, choisis caméra avant ou arrière. La prise directe fonctionne sur localhost ou HTTPS ; sinon utilise l’option Image.</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

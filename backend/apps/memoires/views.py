@@ -39,10 +39,13 @@ class MemoireListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         qs = Memoire.objects.select_related('depose_par')
         niveau = self.request.query_params.get('niveau')
+        filiere = self.request.query_params.get('filiere')
         annee = self.request.query_params.get('annee')
         statut = self.request.query_params.get('statut')
         if niveau:
             qs = qs.filter(niveau=niveau)
+        if filiere:
+            qs = qs.filter(filiere__iexact=filiere)
         if annee:
             qs = qs.filter(annee_academique=annee)
         user = self.request.user

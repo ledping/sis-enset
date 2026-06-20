@@ -1,4 +1,5 @@
 from django.db.models import Count, Sum
+from django.utils import timezone
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from openpyxl import Workbook
@@ -17,6 +18,7 @@ from .models import (
     ParametresPremium,
     PlanAcces,
     PortefeuilleUtilisateur,
+    PromotionPremium,
     audit_premium,
 )
 from .pdf_utils import build_receipt_pdf
@@ -27,8 +29,9 @@ from .serializers import (
     PaiementAccesSerializer,
     ParametresPremiumSerializer,
     PlanAccesSerializer,
+    PromotionPremiumSerializer,
 )
-from .services import premium_summary, top_memoires_queryset
+from .services import active_promotion, premium_summary, top_memoires_queryset
 
 
 class IsAdminOrChef(permissions.BasePermission):
@@ -43,7 +46,15 @@ def client_ip(request):
     return request.META.get('REMOTE_ADDR')
 
 
-class PlanListView(generics.ListAPIView):
+def notify_premium_change(actor, titre, message):
+    users = Utilisateur.objects.filter(actif=True, is_active=True).exclude(id=actor.id if actor else None)
+    for user in users:
+        if user.role == Utilisateur.Role.ENSEIGNANT:
+            continue
+        notifier(user, titre, message, Notification.TypeNotification.INFO, '/premium')
+
+
+class PlanListView(generics.ListCreateAPIView):
     serializer_class = PlanAccesSerializer
 
     def get_queryset(self):
@@ -51,6 +62,56 @@ class PlanListView(generics.ListAPIView):
         if self.request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
             qs = qs.filter(actif=True)
         return qs
+
+    def create(self, request, *args, **kwargs):
+        if request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
+            return Response({'detail': 'Creation reservee a l administration.'}, status=status.HTTP_403_FORBIDDEN)
+        response = super().create(request, *args, **kwargs)
+        audit_premium(
+            AuditPremium.TypeAction.PLAN_MODIFIE,
+            acteur=request.user,
+            description=f'Nouveau pack premium cree : {response.data.get("nom")}.',
+            ip_address=client_ip(request),
+        )
+        notify_premium_change(
+            request.user,
+            'Nouvelle offre premium',
+            f'Une nouvelle offre est disponible : {response.data.get("nom")}.',
+        )
+        return response
+
+
+class PlanDetailView(generics.RetrieveUpdateAPIView):
+    permission_classes = [IsAdminOrChef]
+    queryset = PlanAcces.objects.all()
+    serializer_class = PlanAccesSerializer
+
+    def perform_update(self, serializer):
+        old = self.get_object()
+        old_values = {
+            'nom': old.nom,
+            'prix': old.prix,
+            'ancien_prix': old.ancien_prix,
+            'credits_documents': old.credits_documents,
+            'credits_memoires': old.credits_memoires,
+            'actif': old.actif,
+        }
+        plan = serializer.save()
+        audit_premium(
+            AuditPremium.TypeAction.PLAN_MODIFIE,
+            acteur=self.request.user,
+            description=(
+                f'Pack modifie : {plan.nom}. Ancien prix {old_values["prix"]} FCFA, '
+                f'nouveau prix {plan.prix} FCFA. Credits docs {old_values["credits_documents"]}->{plan.credits_documents}, '
+                f'credits memoires {old_values["credits_memoires"]}->{plan.credits_memoires}.'
+            ),
+            ip_address=client_ip(self.request),
+        )
+        notify_premium_change(
+            self.request.user,
+            'Mise a jour des offres premium',
+            f'Le pack {plan.nom} a ete mis a jour. Consultez la page Acces premium.',
+        )
 
 
 class PremiumMeView(APIView):
@@ -82,10 +143,55 @@ class ParametresPremiumView(APIView):
         audit_premium(
             AuditPremium.TypeAction.PARAMETRES_MODIFIES,
             acteur=request.user,
-            description='Modification des numeros de depot ou des notes de paiement premium.',
+            description='Modification des parametres premium : numeros, quota gratuit, part auteur ou annonce.',
             ip_address=client_ip(request),
         )
+        notify_premium_change(
+            request.user,
+            'Parametres premium mis a jour',
+            'Les regles d acces premium ou les informations de paiement ont ete modifiees.',
+        )
         return Response(serializer.data)
+
+
+class PromotionPremiumListCreateView(generics.ListCreateAPIView):
+    serializer_class = PromotionPremiumSerializer
+
+    def get_queryset(self):
+        if self.request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
+            return PromotionPremium.active()
+        return PromotionPremium.objects.all().order_by('-actif', '-created_at')
+
+    def create(self, request, *args, **kwargs):
+        if request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
+            return Response({'detail': 'Creation reservee a l administration.'}, status=status.HTTP_403_FORBIDDEN)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        promotion = serializer.save(cree_par=request.user)
+        audit_premium(
+            AuditPremium.TypeAction.PROMOTION_CREEE,
+            acteur=request.user,
+            description=f'Promotion creee : {promotion.titre}. Memoires gratuits={promotion.memoires_gratuits}; Documents gratuits={promotion.documents_gratuits}.',
+            ip_address=client_ip(request),
+        )
+        notify_premium_change(request.user, 'Nouvelle promotion premium', promotion.message)
+        return Response(PromotionPremiumSerializer(promotion).data, status=status.HTTP_201_CREATED)
+
+
+class PromotionPremiumDetailView(generics.RetrieveUpdateAPIView):
+    permission_classes = [IsAdminOrChef]
+    queryset = PromotionPremium.objects.all()
+    serializer_class = PromotionPremiumSerializer
+
+    def perform_update(self, serializer):
+        promo = serializer.save()
+        audit_premium(
+            AuditPremium.TypeAction.PROMOTION_MODIFIEE,
+            acteur=self.request.user,
+            description=f'Promotion modifiee : {promo.titre}. Active={promo.actif}.',
+            ip_address=client_ip(self.request),
+        )
+        notify_premium_change(self.request.user, 'Promotion premium mise a jour', promo.message)
 
 
 class PaiementListCreateView(generics.ListCreateAPIView):
@@ -110,6 +216,18 @@ class PaiementListCreateView(generics.ListCreateAPIView):
             description=f'Demande de paiement premium creee pour {paiement.montant} FCFA.',
             ip_address=client_ip(self.request),
         )
+        if paiement.montant == 0:
+            paiement.valider(None)
+            audit_premium(
+                AuditPremium.TypeAction.PAIEMENT_VALIDE,
+                acteur=None,
+                utilisateur_cible=self.request.user,
+                paiement=paiement,
+                description='Pack gratuit active automatiquement selon la politique premium.',
+                ip_address=client_ip(self.request),
+            )
+            notifier(self.request.user, 'Pack premium gratuit active', 'Vos credits gratuits sont maintenant disponibles.', Notification.TypeNotification.INFO, '/premium')
+            return
         admins = Utilisateur.objects.filter(role__in=[Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT], actif=True, is_active=True)
         for admin in admins:
             if admin != self.request.user:
@@ -183,6 +301,8 @@ class PremiumStatsView(APIView):
             'part_auteur_estimee': achats.aggregate(total=Sum('part_auteur_estimee'))['total'] or 0,
             'top_memoires': list(top_memoires_queryset(10)),
             'documents_telecharges': HistoriqueTelechargement.objects.filter(type_ressource=HistoriqueTelechargement.TypeRessource.DOCUMENT).count(),
+            'plans_actifs': PlanAcces.objects.filter(actif=True).count(),
+            'promotion_active': PromotionPremiumSerializer(active_promotion()).data if active_promotion() else None,
         })
 
 
@@ -265,14 +385,19 @@ class PaiementsExportView(APIView):
 
 class PremiumPolicyView(APIView):
     def get(self, request):
+        params = ParametresPremium.get_solo()
+        promo = active_promotion()
+        promo_data = PromotionPremiumSerializer(promo).data if promo else None
         return Response({
             'titre': 'Politique d acces premium SIS ENSET',
-            'documents': 'Chaque etudiant dispose de 3 telechargements gratuits de documents par mois. Au-dela, un pack document donne droit a 5 telechargements supplementaires.',
-            'memoires': 'Les articles, resumes et fiches des memoires restent consultables gratuitement. Le telechargement du PDF complet necessite un credit memoire.',
+            'documents': f'Chaque etudiant dispose de {params.quota_documents_gratuits_mensuel} telechargements gratuits de documents par mois. Au-dela, les packs documents donnent droit a des telechargements supplementaires selon les credits configures par l administration.',
+            'memoires': 'Les articles, resumes et fiches des memoires restent consultables gratuitement. Le telechargement du PDF complet depend des credits memoires, sauf promotion active ou acces institutionnel.',
             'paiements': 'Les paiements sont semi-automatiques : l utilisateur paie sur un numero officiel, transmet une preuve, puis l administration valide ou rejette la demande.',
             'recu': 'Un recu PDF est disponible apres validation du paiement.',
-            'auteurs': 'Les achats de memoires sont historises afin d identifier les productions de forte valeur. Une part auteur estimee peut etre calculee pour un futur mecanisme de reversement institutionnel.',
+            'auteurs': f'Les achats de memoires sont historises afin d identifier les productions de forte valeur. La part auteur indicative est actuellement de {params.pourcentage_auteur} %.',
             'responsabilite': 'Ce module ne remplace pas la comptabilite officielle. Il sert a tracer les acces numeriques, les paiements et la valorisation documentaire sous controle administratif.',
+            'annonce': params.message_annonce,
+            'promotion_active': promo_data,
         })
 
 
@@ -286,8 +411,10 @@ class AdminPlansSeedView(APIView):
                 'type_plan': PlanAcces.TypePlan.DOCUMENT,
                 'description': '1 credit document donnant droit a 5 telechargements supplementaires.',
                 'prix': 500,
+                'ancien_prix': None,
                 'credits_documents': 5,
                 'credits_memoires': 0,
+                'badge': 'Standard',
                 'ordre': 1,
             },
             {
@@ -295,8 +422,10 @@ class AdminPlansSeedView(APIView):
                 'type_plan': PlanAcces.TypePlan.MEMOIRE,
                 'description': '1 credit memoire pour telecharger un memoire complet.',
                 'prix': 500,
+                'ancien_prix': None,
                 'credits_documents': 0,
                 'credits_memoires': 1,
+                'badge': 'Memoire',
                 'ordre': 2,
             },
             {
@@ -304,8 +433,10 @@ class AdminPlansSeedView(APIView):
                 'type_plan': PlanAcces.TypePlan.MIXTE,
                 'description': 'Pack avantageux pour recherches academiques : 5 memoires et 10 documents.',
                 'prix': 2500,
+                'ancien_prix': None,
                 'credits_documents': 10,
                 'credits_memoires': 5,
+                'badge': 'Recommande',
                 'ordre': 3,
             },
         ]

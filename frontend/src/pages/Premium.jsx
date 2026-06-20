@@ -9,9 +9,14 @@ import {
   FileSpreadsheet,
   FileText,
   Medal,
+  Megaphone,
+  Percent,
   Phone,
+  PlusCircle,
+
   Receipt,
   ScrollText,
+  Save,
   Settings,
   ShieldCheck,
   Wallet,
@@ -74,11 +79,30 @@ export default function Premium() {
   const [plans, setPlans] = useState([]);
   const [settings, setSettings] = useState(null);
   const [policy, setPolicy] = useState(null);
-  const [settingsForm, setSettingsForm] = useState({ orange_money_numero: '', mtn_momo_numero: '', beneficiaire: '', note_paiement: '' });
+  const [settingsForm, setSettingsForm] = useState({
+    orange_money_numero: '',
+    mtn_momo_numero: '',
+    beneficiaire: '',
+    note_paiement: '',
+    quota_documents_gratuits_mensuel: 3,
+    pourcentage_auteur: '30.00',
+    message_annonce: '',
+  });
   const [me, setMe] = useState(null);
   const [stats, setStats] = useState(null);
   const [payments, setPayments] = useState([]);
   const [audit, setAudit] = useState([]);
+  const [promotions, setPromotions] = useState([]);
+  const [planForms, setPlanForms] = useState({});
+  const [promotionForm, setPromotionForm] = useState({
+    titre: '',
+    message: '',
+    date_debut: '',
+    date_fin: '',
+    memoires_gratuits: false,
+    documents_gratuits: false,
+    actif: true,
+  });
   const [selectedPlan, setSelectedPlan] = useState('');
   const [form, setForm] = useState({ moyen: 'MTN_MOMO', numero_payeur: '', reference: '', preuve: null, commentaire: '' });
   const [message, setMessage] = useState('');
@@ -87,15 +111,31 @@ export default function Premium() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const requests = [api.get('/premium/plans/'), api.get('/premium/me/'), api.get('/premium/parametres/'), api.get('/premium/politique/')];
+      const requests = [api.get('/premium/plans/'), api.get('/premium/me/'), api.get('/premium/parametres/'), api.get('/premium/politique/'), api.get('/premium/promotions/')];
       if (isAdmin) {
         requests.push(api.get('/premium/stats/'));
         requests.push(api.get('/premium/paiements/'));
         requests.push(api.get('/premium/audit/'));
       }
-      const [plansRes, meRes, settingsRes, policyRes, statsRes, paymentsRes, auditRes] = await Promise.all(requests);
+      const [plansRes, meRes, settingsRes, policyRes, promotionsRes, statsRes, paymentsRes, auditRes] = await Promise.all(requests);
       const settingsData = settingsRes.data || {};
-      setPlans(plansRes.data.results || plansRes.data || []);
+      const plansData = plansRes.data.results || plansRes.data || [];
+      setPlans(plansData);
+      setPlanForms(Object.fromEntries(plansData.map((plan) => [
+        plan.id,
+        {
+          nom: plan.nom || '',
+          description: plan.description || '',
+          prix: plan.prix ?? 0,
+          ancien_prix: plan.ancien_prix ?? '',
+          credits_documents: plan.credits_documents ?? 0,
+          credits_memoires: plan.credits_memoires ?? 0,
+          badge: plan.badge || '',
+          actif: Boolean(plan.actif),
+          ordre: plan.ordre ?? 0,
+        },
+      ])));
+      setPromotions(promotionsRes.data.results || promotionsRes.data || []);
       setMe(meRes.data);
       setSettings(settingsData);
       setPolicy(policyRes.data || null);
@@ -104,6 +144,9 @@ export default function Premium() {
         mtn_momo_numero: settingsData.mtn_momo_numero || '',
         beneficiaire: settingsData.beneficiaire || '',
         note_paiement: settingsData.note_paiement || '',
+        quota_documents_gratuits_mensuel: settingsData.quota_documents_gratuits_mensuel ?? 3,
+        pourcentage_auteur: settingsData.pourcentage_auteur ?? '30.00',
+        message_annonce: settingsData.message_annonce || '',
       });
       if (statsRes) setStats(statsRes.data);
       if (paymentsRes) setPayments(paymentsRes.data.results || paymentsRes.data || []);
@@ -145,6 +188,54 @@ export default function Premium() {
       void load();
     } catch {
       setMessage('Modification des paramètres impossible.');
+    }
+  };
+
+  const updatePlanField = (planId, field, value) => {
+    setPlanForms((current) => ({
+      ...current,
+      [planId]: {
+        ...(current[planId] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  const savePlan = async (plan) => {
+    const payload = planForms[plan.id] || {};
+    try {
+      await api.patch(`/premium/plans/${plan.id}/`, payload);
+      setMessage(`Pack ${payload.nom || plan.nom} mis à jour. Les étudiants seront notifiés automatiquement.`);
+      void load();
+    } catch (error) {
+      setMessage(error.response?.data ? JSON.stringify(error.response.data) : 'Modification du pack impossible.');
+    }
+  };
+
+  const createPromotion = async (event) => {
+    event.preventDefault();
+    try {
+      const payload = {
+        ...promotionForm,
+        date_debut: promotionForm.date_debut || null,
+        date_fin: promotionForm.date_fin || null,
+      };
+      await api.post('/premium/promotions/', payload);
+      setPromotionForm({ titre: '', message: '', date_debut: '', date_fin: '', memoires_gratuits: false, documents_gratuits: false, actif: true });
+      setMessage('Promotion publiée. Les étudiants seront notifiés automatiquement.');
+      void load();
+    } catch (error) {
+      setMessage(error.response?.data ? JSON.stringify(error.response.data) : 'Publication de la promotion impossible.');
+    }
+  };
+
+  const togglePromotion = async (promotion) => {
+    try {
+      await api.patch(`/premium/promotions/${promotion.id}/`, { actif: !promotion.actif });
+      setMessage(!promotion.actif ? 'Promotion réactivée.' : 'Promotion désactivée.');
+      void load();
+    } catch {
+      setMessage('Modification de la promotion impossible.');
     }
   };
 
@@ -242,6 +333,9 @@ export default function Premium() {
 
       {message && <div className="alert alert-info border-0 shadow-sm">{message}</div>}
 
+      {policy?.annonce && <div className="premium-announcement"><Megaphone size={20} /><div><strong>Information officielle</strong><span>{policy.annonce}</span></div></div>}
+      {policy?.promotion_active && <div className="premium-announcement promo"><Percent size={20} /><div><strong>{policy.promotion_active.titre}</strong><span>{policy.promotion_active.message}</span></div></div>}
+
       <div className="premium-grid premium-wallet-grid">
         <div className="premium-card highlight"><div className="premium-card-icon"><FileText size={21} /></div><span>Documents gratuits ce mois-ci</span><strong>{summary.documents_gratuits_restants ?? 0} / {summary.documents_gratuits_mois ?? 3}</strong><small>{summary.documents_gratuits_utilises ?? 0} utilisés</small></div>
         <div className="premium-card"><div className="premium-card-icon"><Download size={21} /></div><span>Documents via crédits</span><strong>{summary.telechargements_documents_credits ?? 0}</strong><small>1 pack document = 5 téléchargements</small></div>
@@ -289,8 +383,63 @@ export default function Premium() {
                   <label>MTN Mobile Money</label><input className="form-control" value={settingsForm.mtn_momo_numero} onChange={(e) => setSettingsForm({ ...settingsForm, mtn_momo_numero: e.target.value })} />
                   <label>Bénéficiaire officiel</label><input className="form-control" value={settingsForm.beneficiaire} onChange={(e) => setSettingsForm({ ...settingsForm, beneficiaire: e.target.value })} />
                   <label>Note affichée aux utilisateurs</label><textarea className="form-control" rows={3} value={settingsForm.note_paiement} onChange={(e) => setSettingsForm({ ...settingsForm, note_paiement: e.target.value })} />
+                  <label>Quota documents gratuits / mois</label><input type="number" min="0" className="form-control" value={settingsForm.quota_documents_gratuits_mensuel} onChange={(e) => setSettingsForm({ ...settingsForm, quota_documents_gratuits_mensuel: e.target.value })} />
+                  <label>Part auteur indicative (%)</label><input type="number" min="0" max="100" step="0.01" className="form-control" value={settingsForm.pourcentage_auteur} onChange={(e) => setSettingsForm({ ...settingsForm, pourcentage_auteur: e.target.value })} />
+                  <label>Annonce officielle visible par les étudiants</label><textarea className="form-control" rows={3} value={settingsForm.message_annonce} onChange={(e) => setSettingsForm({ ...settingsForm, message_annonce: e.target.value })} placeholder="Ex : Offre spéciale rentrée, tarifs révisés, période promotionnelle..." />
                   <button className="btn btn-primary mt-2" type="submit"><Settings size={16} /> Enregistrer</button>
                 </form>
+              </div>
+            </div>
+
+            <div className="premium-panel nested premium-plan-admin-panel">
+              <h4>Offres, tarifs et crédits dynamiques</h4>
+              <p className="text-muted small">Le chef ou l’admin peut modifier les prix, crédits, ancien prix, badge et disponibilité sans toucher au code.</p>
+              <div className="premium-admin-plan-list">
+                {plans.map((plan) => {
+                  const data = planForms[plan.id] || {};
+                  return (
+                    <div className="premium-admin-plan" key={plan.id}>
+                      <div className="premium-admin-plan-head"><strong>{data.nom || plan.nom}</strong><span>{data.actif ? 'Actif' : 'Masqué'}</span></div>
+                      <div className="row g-2">
+                        <div className="col-md-6"><label>Nom</label><input className="form-control" value={data.nom || ''} onChange={(e) => updatePlanField(plan.id, 'nom', e.target.value)} /></div>
+                        <div className="col-md-3"><label>Prix</label><input type="number" min="0" className="form-control" value={data.prix ?? 0} onChange={(e) => updatePlanField(plan.id, 'prix', Number(e.target.value))} /></div>
+                        <div className="col-md-3"><label>Ancien prix</label><input type="number" min="0" className="form-control" value={data.ancien_prix ?? ''} onChange={(e) => updatePlanField(plan.id, 'ancien_prix', e.target.value === '' ? null : Number(e.target.value))} /></div>
+                        <div className="col-md-3"><label>Crédits docs</label><input type="number" min="0" className="form-control" value={data.credits_documents ?? 0} onChange={(e) => updatePlanField(plan.id, 'credits_documents', Number(e.target.value))} /></div>
+                        <div className="col-md-3"><label>Crédits mémoires</label><input type="number" min="0" className="form-control" value={data.credits_memoires ?? 0} onChange={(e) => updatePlanField(plan.id, 'credits_memoires', Number(e.target.value))} /></div>
+                        <div className="col-md-3"><label>Badge</label><input className="form-control" value={data.badge || ''} onChange={(e) => updatePlanField(plan.id, 'badge', e.target.value)} placeholder="Promo" /></div>
+                        <div className="col-md-3"><label>Ordre</label><input type="number" min="0" className="form-control" value={data.ordre ?? 0} onChange={(e) => updatePlanField(plan.id, 'ordre', Number(e.target.value))} /></div>
+                        <div className="col-12"><label>Description</label><textarea className="form-control" rows={2} value={data.description || ''} onChange={(e) => updatePlanField(plan.id, 'description', e.target.value)} /></div>
+                      </div>
+                      <div className="premium-admin-plan-actions">
+                        <label className="form-check"><input className="form-check-input" type="checkbox" checked={Boolean(data.actif)} onChange={(e) => updatePlanField(plan.id, 'actif', e.target.checked)} /> <span className="form-check-label">Pack visible</span></label>
+                        <button className="btn btn-primary btn-sm" type="button" onClick={() => void savePlan(plan)}><Save size={15} /> Enregistrer</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="premium-panel nested premium-promo-admin-panel">
+              <h4>Promotions et gratuités temporaires</h4>
+              <p className="text-muted small">Publiez une promotion : gratuité des mémoires, gratuité des documents ou simple annonce. Les étudiants sont notifiés automatiquement.</p>
+              <form className="premium-promo-form" onSubmit={createPromotion}>
+                <div className="row g-2">
+                  <div className="col-md-6"><label>Titre</label><input className="form-control" value={promotionForm.titre} onChange={(e) => setPromotionForm({ ...promotionForm, titre: e.target.value })} required placeholder="Offre spéciale lancement" /></div>
+                  <div className="col-md-3"><label>Début</label><input type="datetime-local" className="form-control" value={promotionForm.date_debut} onChange={(e) => setPromotionForm({ ...promotionForm, date_debut: e.target.value })} /></div>
+                  <div className="col-md-3"><label>Fin</label><input type="datetime-local" className="form-control" value={promotionForm.date_fin} onChange={(e) => setPromotionForm({ ...promotionForm, date_fin: e.target.value })} /></div>
+                  <div className="col-12"><label>Message visible par les étudiants</label><textarea className="form-control" rows={2} value={promotionForm.message} onChange={(e) => setPromotionForm({ ...promotionForm, message: e.target.value })} required /></div>
+                </div>
+                <div className="premium-promo-checks">
+                  <label><input type="checkbox" checked={promotionForm.memoires_gratuits} onChange={(e) => setPromotionForm({ ...promotionForm, memoires_gratuits: e.target.checked })} /> Mémoires gratuits pendant la promotion</label>
+                  <label><input type="checkbox" checked={promotionForm.documents_gratuits} onChange={(e) => setPromotionForm({ ...promotionForm, documents_gratuits: e.target.checked })} /> Documents gratuits pendant la promotion</label>
+                  <label><input type="checkbox" checked={promotionForm.actif} onChange={(e) => setPromotionForm({ ...promotionForm, actif: e.target.checked })} /> Publier immédiatement</label>
+                </div>
+                <button className="btn btn-success" type="submit"><PlusCircle size={16} /> Publier la promotion</button>
+              </form>
+              <div className="premium-promo-list">
+                {promotions.slice(0, 6).map((promo) => <div className="premium-promo-item" key={promo.id}><div><strong>{promo.titre}</strong><span>{promo.message}</span><small>{promo.memoires_gratuits ? 'Mémoires gratuits · ' : ''}{promo.documents_gratuits ? 'Documents gratuits · ' : ''}{promo.est_active ? 'Active maintenant' : 'Inactive'}</small></div><button className={`btn btn-sm ${promo.actif ? 'btn-outline-danger' : 'btn-outline-success'}`} type="button" onClick={() => void togglePromotion(promo)}>{promo.actif ? 'Désactiver' : 'Réactiver'}</button></div>)}
+                {promotions.length === 0 && <div className="empty-state compact-empty">Aucune promotion enregistrée.</div>}
               </div>
             </div>
           </section>
@@ -321,7 +470,7 @@ export default function Premium() {
             <div className="premium-payment-instructions"><Phone size={18} /><div><strong>Numéros officiels de dépôt</strong><span>Orange Money : {settings?.orange_money_numero || '—'} · MTN Mobile Money : {settings?.mtn_momo_numero || '—'}</span><small>Bénéficiaire : {settings?.beneficiaire || 'Département ENSET Douala'}. {settings?.note_paiement}</small></div></div>
 
             <div className="premium-plans">
-              {plans.map((plan) => <button key={plan.id} type="button" className={`premium-plan ${String(selectedPlan) === String(plan.id) ? 'selected' : ''}`} onClick={() => setSelectedPlan(plan.id)}><strong>{plan.nom}</strong><span>{plan.description}</span><b>{money(plan.prix)}</b><small>{plan.credits_documents} docs · {plan.credits_memoires} mémoires</small></button>)}
+              {plans.map((plan) => <button key={plan.id} type="button" className={`premium-plan ${String(selectedPlan) === String(plan.id) ? 'selected' : ''}`} onClick={() => setSelectedPlan(plan.id)}>{plan.badge && <em>{plan.badge}</em>}<strong>{plan.nom}</strong><span>{plan.description}</span><b>{Number(plan.prix) === 0 ? 'Gratuit' : money(plan.prix)}</b>{plan.ancien_prix ? <small className="premium-old-price">au lieu de {money(plan.ancien_prix)}</small> : null}<small>{plan.credits_documents} docs · {plan.credits_memoires} mémoires</small></button>)}
               {!plans.length && <div className="empty-state compact-empty">Aucun pack configuré.</div>}
             </div>
 
@@ -334,7 +483,7 @@ export default function Premium() {
                 <div className="col-md-6"><label className="form-label fw-semibold">Preuve de paiement</label><input type="file" className="form-control" accept="image/*,.pdf" onChange={(e) => setForm({ ...form, preuve: e.target.files?.[0] || null })} /></div>
                 <div className="col-12"><label className="form-label fw-semibold">Commentaire</label><textarea className="form-control" rows={2} value={form.commentaire} onChange={(e) => setForm({ ...form, commentaire: e.target.value })} placeholder="Informations complémentaires" /></div>
               </div>
-              <button className="btn btn-primary mt-3" type="submit" disabled={submitting || !selectedPlanData}><Receipt size={17} /> Soumettre le paiement {selectedPlanData ? `(${money(selectedPlanData.prix)})` : ''}</button>
+              <button className="btn btn-primary mt-3" type="submit" disabled={submitting || !selectedPlanData}><Receipt size={17} /> {Number(selectedPlanData?.prix || 0) === 0 ? 'Activer le pack gratuit' : 'Soumettre le paiement'} {selectedPlanData ? `(${money(selectedPlanData.prix)})` : ''}</button>
             </form>
           </section>
 

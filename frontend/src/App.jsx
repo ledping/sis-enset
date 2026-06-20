@@ -16,6 +16,9 @@ import Notifications from './pages/Notifications';
 import Sessions from './pages/Sessions';
 import Validations from './pages/Validations';
 import Premium from './pages/Premium';
+import Aide from './pages/Aide';
+import Support from './pages/Support';
+import Systeme from './pages/Systeme';
 
 export default function App() {
   return (
@@ -33,6 +36,9 @@ export default function App() {
             <Route path="/recherche" element={<Recherche />} />
             <Route path="/messages" element={<Messages />} />
             <Route path="/notifications" element={<Notifications />} />
+            <Route path="/aide" element={<Aide />} />
+            <Route path="/support" element={<Support />} />
+            <Route path="/systeme" element={<ProtectedRoute roles={["ADMIN", "CHEF_DEPT"]}><Systeme /></ProtectedRoute>} />
             <Route path="/premium" element={<ProtectedRoute roles={["ADMIN", "CHEF_DEPT", "ETUDIANT"]}><Premium /></ProtectedRoute>} />
             <Route path="/profil" element={<Profile />} />
             <Route path="/validations" element={<ProtectedRoute roles={["ADMIN", "CHEF_DEPT"]}><Validations /></ProtectedRoute>} />

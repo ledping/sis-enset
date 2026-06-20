@@ -14,4 +14,6 @@ urlpatterns = [
     path('api/notifications/',  include('apps.notifications.urls')),
     path('api/sessions/',       include('apps.sessions_reseau.urls')),
     path('api/premium/',        include('apps.premium.urls')),
+    path('api/appels/',         include('apps.appels.urls')),
+    path('api/exploitation/',    include('apps.exploitation.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

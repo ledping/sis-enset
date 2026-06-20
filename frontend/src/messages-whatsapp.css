@@ -1367,3 +1367,655 @@
     justify-content: center;
   }
 }
+
+/* v10.0 - Appels audio/vidéo internes */
+.chat-call-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-call-actions button,
+.chat-room-actions button {
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  background: #fff;
+  color: #0f172a;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.chat-call-actions button:hover,
+.chat-room-actions button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.45);
+  color: #2563eb;
+}
+
+.call-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.46);
+  backdrop-filter: blur(10px);
+  padding: 20px;
+}
+
+.call-card {
+  width: min(520px, 100%);
+  border-radius: 34px;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.32);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  padding: 24px;
+  color: #0f172a;
+}
+
+.call-card.video {
+  width: min(820px, 100%);
+}
+
+.call-card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.call-card-header .chat-avatar-wrap,
+.call-card-header .chat-avatar {
+  width: 58px;
+  height: 58px;
+}
+
+.call-card-header span {
+  display: block;
+  font-weight: 800;
+  color: #2563eb;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-size: 12px;
+}
+
+.call-card-header strong {
+  display: block;
+  font-size: clamp(22px, 4vw, 34px);
+  line-height: 1.05;
+}
+
+.call-card-header small {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.call-audio-stage {
+  min-height: 210px;
+  border-radius: 28px;
+  border: 1px solid rgba(191, 219, 254, 0.95);
+  background: radial-gradient(circle at top, #eff6ff, #ffffff 62%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.call-avatar-large .chat-avatar-wrap,
+.call-avatar-large .chat-avatar {
+  width: 112px;
+  height: 112px;
+  font-size: 32px;
+}
+
+.call-audio-stage p {
+  margin: 0;
+  color: #475569;
+  font-weight: 800;
+}
+
+.call-video-grid {
+  position: relative;
+  min-height: 380px;
+  border-radius: 30px;
+  overflow: hidden;
+  background: #020617;
+  margin-bottom: 18px;
+}
+
+.call-video-grid video {
+  background: #020617;
+  object-fit: cover;
+}
+
+.remote-video {
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+  display: block;
+}
+
+.local-video {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  width: 180px;
+  height: 120px;
+  border-radius: 20px;
+  border: 3px solid #fff;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.call-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.call-controls button {
+  border: none;
+  border-radius: 999px;
+  padding: 13px 18px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #eef2ff;
+  color: #1e3a8a;
+}
+
+.call-controls button.active {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.call-controls button.success {
+  background: #10b981;
+  color: #fff;
+  min-width: 150px;
+}
+
+.call-controls button.danger {
+  background: #ef4444;
+  color: #fff;
+  min-width: 150px;
+}
+
+.call-controls button.round {
+  width: 58px;
+  height: 58px;
+  min-width: 58px;
+  padding: 0;
+}
+
+.call-note {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.call-user-id {
+  display: block;
+  margin-top: 10px;
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .chat-call-actions {
+    gap: 6px;
+  }
+
+  .chat-call-actions button,
+  .chat-room-actions button {
+    width: 38px;
+    height: 38px;
+  }
+
+  .call-card {
+    padding: 18px;
+    border-radius: 26px;
+  }
+
+  .call-video-grid,
+  .remote-video {
+    min-height: 300px;
+  }
+
+  .local-video {
+    width: 118px;
+    height: 86px;
+    right: 12px;
+    bottom: 12px;
+    border-radius: 16px;
+  }
+
+  .call-controls button.success,
+  .call-controls button.danger {
+    min-width: 125px;
+  }
+}
+
+/* v10.4 - Ergonomie mobile prioritaire pour smartphones campus */
+@media (max-width: 680px) {
+  .chat-page {
+    min-height: calc(100vh - 92px);
+  }
+
+  .chat-shell {
+    height: calc(100vh - 108px);
+    min-height: 0;
+    border-radius: 0;
+    grid-template-columns: 1fr;
+    box-shadow: none;
+  }
+
+  .chat-sidebar-panel {
+    max-height: 218px;
+    flex: 0 0 auto;
+  }
+
+  .chat-sidebar-header {
+    min-height: 58px;
+    padding: 10px 12px;
+  }
+
+  .chat-search-box {
+    height: 42px;
+    margin: 8px 12px;
+  }
+
+  .chat-filter-row {
+    padding: 0 12px 8px;
+  }
+
+  .chat-filter-row button {
+    padding: 7px 13px;
+    font-size: 13px;
+  }
+
+  .chat-conversation-list {
+    padding: 0 10px 10px;
+  }
+
+  .chat-contact-row {
+    flex: 0 0 205px;
+    min-height: 72px;
+    padding: 9px 10px;
+  }
+
+  .chat-avatar,
+  .chat-avatar-wrap .chat-avatar {
+    width: 46px;
+    height: 46px;
+  }
+
+  .chat-room-panel {
+    min-height: 0;
+    height: calc(100vh - 326px);
+  }
+
+  .chat-room-header {
+    min-height: 58px;
+    padding: 8px 10px;
+  }
+
+  .chat-room-user strong {
+    font-size: 14px;
+  }
+
+  .chat-room-actions {
+    gap: 6px;
+  }
+
+  .chat-room-actions button,
+  .chat-call-actions button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .chat-messages-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px 8px 12px;
+  }
+
+  .chat-bubble {
+    max-width: 96%;
+    border-radius: 16px;
+  }
+
+  .chat-file-card {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .chat-file-card strong {
+    max-width: 180px;
+  }
+
+  .chat-composer {
+    position: sticky;
+    bottom: 0;
+    z-index: 25000;
+    background: rgba(248, 250, 252, .98);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(226, 232, 240, .95);
+    padding: 8px;
+    grid-template-columns: auto auto minmax(0, 1fr) auto !important;
+  }
+
+  .chat-composer > input:not([type='file']) {
+    min-width: 0 !important;
+    font-size: 14px;
+    height: 42px;
+  }
+
+  .chat-mic-button,
+  .chat-composer button.send,
+  .chat-menu-anchor > button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .chat-popover {
+    position: fixed !important;
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 76px !important;
+    width: auto !important;
+    max-width: none !important;
+    z-index: 60000 !important;
+  }
+
+  .attachment-popover {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .emoji-popover {
+    grid-template-columns: repeat(6, 1fr);
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .emoji-popover button {
+    width: 100%;
+  }
+}
+
+/* v10.5.2 - prise de photo directe optimisee et responsive */
+.camera-capture-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.camera-capture-card {
+  width: min(760px, 96vw);
+  max-height: 88dvh;
+  overflow: hidden;
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.30);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  display: flex;
+  flex-direction: column;
+}
+
+.camera-capture-header {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5edf7;
+  background: #ffffff;
+}
+
+.camera-capture-header strong {
+  display: block;
+  font-size: 1.06rem;
+  color: #0f172a;
+}
+
+.camera-capture-header span {
+  display: block;
+  color: #64748b;
+  font-size: 0.9rem;
+  margin-top: 3px;
+}
+
+.camera-capture-header button,
+.camera-capture-actions button,
+.camera-capture-switch button {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.camera-capture-header button {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.camera-capture-header button:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+.camera-capture-preview {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 260px;
+  max-height: min(52dvh, 430px);
+  background: #020617;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.camera-capture-video {
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  object-fit: cover;
+  background: #020617;
+  display: block;
+}
+
+.camera-capture-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 800;
+  background: linear-gradient(135deg, rgba(2, 6, 23, 0.94), rgba(15, 23, 42, 0.86));
+}
+
+.camera-capture-switch {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 18px 0;
+  background: #ffffff;
+}
+
+.camera-capture-switch button {
+  min-height: 44px;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.94rem;
+  font-weight: 800;
+  border: 1px solid #dbe7f3;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.camera-capture-switch button:hover {
+  transform: translateY(-1px);
+  background: #eef6ff;
+  border-color: #bfdbfe;
+}
+
+.camera-capture-switch button.active {
+  background: #e8f7f1;
+  color: #047857;
+  border-color: #8ee0bf;
+  box-shadow: 0 10px 25px rgba(4, 120, 87, 0.12);
+}
+
+.camera-capture-actions {
+  flex: 0 0 auto;
+  padding: 14px 18px 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.45fr;
+  gap: 12px;
+  background: #ffffff;
+}
+
+.camera-capture-actions button {
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.camera-capture-actions button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.camera-capture-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.camera-capture-actions .ghost {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.camera-capture-actions .capture {
+  background: linear-gradient(135deg, #0f9f76, #00b894);
+  color: #fff;
+  box-shadow: 0 14px 35px rgba(15, 159, 118, 0.24);
+}
+
+.camera-capture-note {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 20px 16px;
+  color: #64748b;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  background: #ffffff;
+}
+
+@media (max-width: 840px) {
+  .camera-capture-card {
+    width: min(96vw, 720px);
+  }
+
+  .camera-capture-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .camera-capture-actions .capture {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .camera-capture-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .camera-capture-card {
+    width: 100vw;
+    max-height: 96dvh;
+    border-radius: 24px 24px 0 0;
+  }
+
+  .camera-capture-header {
+    padding: 14px 16px;
+  }
+
+  .camera-capture-preview {
+    min-height: 48dvh;
+    max-height: 56dvh;
+  }
+
+  .camera-capture-video {
+    min-height: 48dvh;
+  }
+
+  .camera-capture-switch {
+    padding: 12px 14px 0;
+  }
+
+  .camera-capture-actions {
+    grid-template-columns: 1fr 1fr;
+    padding: 12px 14px 10px;
+  }
+
+  .camera-capture-actions button {
+    min-height: 46px;
+    padding: 0 12px;
+    font-size: 0.9rem;
+  }
+
+  .camera-capture-actions .capture {
+    grid-column: 1 / -1;
+    min-height: 52px;
+    font-size: 1rem;
+  }
+
+  .camera-capture-note {
+    padding: 0 16px 14px;
+    font-size: 0.78rem;
+  }
+}

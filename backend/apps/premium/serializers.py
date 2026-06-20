@@ -1,18 +1,40 @@
 from rest_framework import serializers
-from .models import AchatMemoire, AuditPremium, HistoriqueTelechargement, PaiementAcces, ParametresPremium, PlanAcces, PortefeuilleUtilisateur
+from .models import AchatMemoire, AuditPremium, HistoriqueTelechargement, PaiementAcces, ParametresPremium, PlanAcces, PortefeuilleUtilisateur, PromotionPremium
 
 
 class PlanAccesSerializer(serializers.ModelSerializer):
     class Meta:
         model = PlanAcces
-        fields = ['id', 'nom', 'type_plan', 'description', 'prix', 'credits_documents', 'credits_memoires', 'actif', 'ordre']
+        fields = ['id', 'nom', 'type_plan', 'description', 'prix', 'ancien_prix', 'credits_documents', 'credits_memoires', 'badge', 'actif', 'ordre', 'updated_at']
+        read_only_fields = ['id', 'updated_at']
 
 
 class ParametresPremiumSerializer(serializers.ModelSerializer):
     class Meta:
         model = ParametresPremium
-        fields = ['id', 'orange_money_numero', 'mtn_momo_numero', 'beneficiaire', 'note_paiement', 'updated_at']
+        fields = ['id', 'orange_money_numero', 'mtn_momo_numero', 'beneficiaire', 'note_paiement', 'quota_documents_gratuits_mensuel', 'pourcentage_auteur', 'message_annonce', 'updated_at']
         read_only_fields = ['id', 'updated_at']
+
+
+class PromotionPremiumSerializer(serializers.ModelSerializer):
+    cree_par_nom = serializers.SerializerMethodField()
+    est_active = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PromotionPremium
+        fields = [
+            'id', 'titre', 'message', 'date_debut', 'date_fin', 'memoires_gratuits',
+            'documents_gratuits', 'actif', 'est_active', 'cree_par', 'cree_par_nom', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'cree_par', 'cree_par_nom', 'created_at', 'updated_at', 'est_active']
+
+    def get_cree_par_nom(self, obj):
+        if not obj.cree_par:
+            return ''
+        return obj.cree_par.get_full_name() or obj.cree_par.username
+
+    def get_est_active(self, obj):
+        return obj.est_active()
 
 
 class PortefeuilleSerializer(serializers.ModelSerializer):

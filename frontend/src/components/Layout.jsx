@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { BarChart3, Bell, BookOpen, CheckSquare, CreditCard, FileSearch, FileText, LogOut, Menu, MessageSquareText, Network, ShieldCheck, UserCog, UserRound, X } from 'lucide-react';
+import { BarChart3, Bell, BookOpen, CheckSquare, CreditCard, FileSearch, FileText, HelpCircle, LifeBuoy, LogOut, Menu, MessageSquareText, Network, Server, ShieldCheck, UserCog, UserRound, X } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
 import api from '../api';
 
@@ -75,6 +75,9 @@ export default function Layout() {
     user?.role === 'ETUDIANT' ? { to: '/premium', label: 'Acces premium', icon: CreditCard } : null,
     canValidate ? { to: '/premium', label: 'Gestion premium', icon: CreditCard } : null,
     { to: '/notifications', label: 'Notifications', icon: Bell, badge: unreadNotifications },
+    { to: '/support', label: 'Support', icon: LifeBuoy },
+    { to: '/aide', label: 'Aide', icon: HelpCircle },
+    canValidate ? { to: '/systeme', label: 'Etat systeme', icon: Server } : null,
     { to: '/profil', label: 'Mon compte', icon: UserRound },
   ].filter(Boolean);
 

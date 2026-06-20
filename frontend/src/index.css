@@ -377,3 +377,190 @@ a { text-decoration: none; }
   .dashboard-hero-actions { width: 100%; }
   .dashboard-hero-actions .btn { flex: 1 1 auto; justify-content: center; }
 }
+
+/* v10.4 - Ressources mieux classées + ergonomie smartphone */
+.resources-filter-title {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  margin-bottom: .7rem;
+  color: #0f172a;
+  font-weight: 900;
+}
+
+.resource-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.resource-level-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: .3rem .65rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 800;
+  font-size: .75rem;
+}
+
+.resource-document-card .meta-line {
+  margin-bottom: .3rem;
+}
+
+@media (max-width: 768px) {
+  .page-title-responsive,
+  .page-title {
+    align-items: stretch !important;
+    gap: .75rem;
+  }
+
+  .page-title-responsive .btn,
+  .page-title .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .filter-card,
+  .resources-filter-card,
+  .search-filter-card {
+    padding: .85rem;
+    border-radius: 1.2rem;
+  }
+
+  .premium-access-strip.resource-premium-strip {
+    align-items: stretch;
+  }
+
+  .premium-access-strip.resource-premium-strip .btn {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+
+  .resources-grid .document-card,
+  .resource-document-card {
+    border-radius: 1.1rem;
+  }
+
+  .resource-card-footer {
+    flex-wrap: wrap;
+  }
+
+  .resource-card-footer .btn {
+    flex: 1 1 120px;
+  }
+
+  .search-results-grid-responsive,
+  .search-results-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .search-result-card-responsive,
+  .search-result-card {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) !important;
+    gap: .8rem !important;
+    align-items: start !important;
+  }
+
+  .search-result-card-responsive .btn,
+  .search-result-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .search-result-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: .5rem;
+  }
+
+  .search-result-actions .btn {
+    justify-content: center;
+  }
+
+  .search-mobile-input.input-group-lg > .form-control,
+  .search-mobile-input.input-group-lg > .input-group-text {
+    font-size: 1rem;
+    padding: .65rem .75rem;
+  }
+}
+
+/* === SIS ENSET v11.0 : exploitation institutionnelle, aide, support, mobile === */
+.v11-page { padding-bottom: 32px; }
+.v11-hero {
+  display: flex; align-items: center; justify-content: space-between; gap: 18px;
+  padding: 24px; margin-bottom: 20px; border-radius: 28px;
+  background: linear-gradient(135deg, #ffffff 0%, #eef6ff 55%, #e8fff4 100%);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); border: 1px solid rgba(46, 117, 182, 0.12);
+}
+.v11-hero h2 { margin: 0 0 8px; font-weight: 900; color: #0f172a; font-size: clamp(1.7rem, 4vw, 2.6rem); }
+.v11-hero p { margin: 0; color: #64748b; max-width: 760px; font-size: 1rem; line-height: 1.65; }
+.v11-guide-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.v11-guide-card, .v11-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 24px; padding: 22px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+}
+.v11-guide-card h3, .v11-card h3 { margin: 0 0 10px; font-size: 1.28rem; font-weight: 900; color: #0f172a; display: flex; align-items: center; gap: 8px; }
+.v11-guide-card p, .v11-card p { color: #64748b; line-height: 1.55; }
+.v11-guide-card ul { margin: 0 0 18px; padding-left: 18px; color: #475569; }
+.v11-guide-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 16px; background: #eaf3ff; color: #2e75b6; margin-bottom: 14px; }
+.v11-info-strip {
+  display: flex; align-items: flex-start; gap: 14px; background: #fff7ed; border: 1px solid #fed7aa;
+  color: #9a3412; padding: 16px 18px; border-radius: 20px; margin-top: 18px;
+}
+.v11-info-strip strong { display: block; color: #7c2d12; }
+.v11-info-strip span { display: block; line-height: 1.5; }
+.v11-stat-grid, .v11-status-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.v11-mini-stat, .v11-status-card {
+  background: #fff; border-radius: 20px; border: 1px solid #e2e8f0; padding: 18px;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.05);
+}
+.v11-mini-stat { display: flex; align-items: center; gap: 12px; }
+.v11-mini-stat span, .v11-status-card span { color: #64748b; font-weight: 700; }
+.v11-mini-stat strong, .v11-status-card strong { margin-left: auto; font-size: 1.45rem; color: #0f172a; }
+.v11-status-card { display: grid; gap: 8px; }
+.v11-status-card svg { color: #2e75b6; }
+.v11-status-card.ok svg { color: #16a34a; }
+.v11-kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.v11-kpi-grid div { background: #f8fafc; border-radius: 18px; padding: 16px; border: 1px solid #e2e8f0; }
+.v11-kpi-grid span { display: block; color: #64748b; font-size: .92rem; }
+.v11-kpi-grid strong { display: block; font-size: 1.8rem; color: #0f172a; font-weight: 900; }
+.v11-storage-bar { height: 12px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin: 18px 0 12px; }
+.v11-storage-bar div { height: 100%; background: linear-gradient(90deg, #2e75b6, #16a34a); border-radius: inherit; }
+.v11-ticket-list, .v11-backup-list { display: grid; gap: 14px; }
+.v11-ticket { border: 1px solid #e2e8f0; border-radius: 18px; padding: 16px; background: #f8fafc; }
+.v11-ticket-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.v11-ticket-head strong { display: block; font-weight: 900; color: #0f172a; }
+.v11-ticket-head span, .v11-ticket-meta, .v11-backup-list span, .v11-backup-list small { color: #64748b; font-size: .9rem; }
+.v11-ticket p { margin: 12px 0; color: #334155; }
+.v11-ticket-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.v11-ticket-meta span { background: #fff; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 999px; }
+.v11-status { padding: 6px 10px; border-radius: 999px; font-weight: 800; font-size: .78rem; background: #e2e8f0; color: #334155; white-space: nowrap; }
+.v11-status.ouvert { background: #fee2e2; color: #991b1b; }
+.v11-status.en_cours { background: #dbeafe; color: #1d4ed8; }
+.v11-status.resolu, .v11-status.ferme { background: #dcfce7; color: #166534; }
+.v11-reply { background: #ecfdf5; border-left: 4px solid #16a34a; padding: 10px 12px; border-radius: 12px; color: #14532d; }
+.v11-backup-list > div { display: grid; gap: 3px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; }
+
+@media (max-width: 1100px) {
+  .v11-guide-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .v11-stat-grid, .v11-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .v11-hero { flex-direction: column; align-items: stretch; padding: 18px; border-radius: 22px; }
+  .v11-guide-grid, .v11-stat-grid, .v11-status-grid, .v11-kpi-grid { grid-template-columns: 1fr; }
+  .v11-mini-stat strong { margin-left: 0; }
+  .v11-mini-stat { justify-content: space-between; }
+  .v11-ticket-head { flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 900; }
+  .content-area { padding-inline: 12px !important; }
+  .page-title-responsive { align-items: stretch !important; }
+  .page-title-responsive .btn { width: 100%; justify-content: center; }
+  .resources-filter-card .row > div { width: 100%; }
+  .resource-card-footer { flex-wrap: wrap; }
+  .resource-card-footer .btn { flex: 1 1 auto; }
+}

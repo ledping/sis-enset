@@ -16,6 +16,8 @@ import {
   ShieldCheck,
   UsersRound,
   Wifi,
+  LifeBuoy,
+  HelpCircle,
 } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
 import api from '../api';
@@ -187,6 +189,7 @@ export default function Dashboard() {
         </div>
         <div className="dashboard-hero-actions">
           <Link className="btn btn-light" to="/messages"><MessageSquareText size={17} /> Messagerie</Link>
+          <Link className="btn btn-light" to="/support"><LifeBuoy size={17} /> Support</Link>
           {isStudent && <Link className="btn btn-warning" to="/premium"><CreditCard size={17} /> Mes credits</Link>}
           {isTeacher && <Link className="btn btn-warning" to="/documents"><FilePlus2 size={17} /> Deposer</Link>}
           {canValidate && <Link className="btn btn-warning" to="/validations"><CheckSquare size={17} /> Validations</Link>}
@@ -223,6 +226,8 @@ export default function Dashboard() {
               <QuickAccessCard to="/recherche" icon={FileSearch} title="Rechercher une ressource" text="Trouver rapidement un document ou un memoire." />
               <QuickAccessCard to="/memoires" icon={BookOpen} title="Lire les articles de memoires" text="Consultation gratuite des fiches et articles." />
               {isStudent && <QuickAccessCard to="/premium" icon={CreditCard} title="Gerer mes credits" text="Acheter des packs et suivre mes telechargements." />}
+              <QuickAccessCard to="/aide" icon={HelpCircle} title="Consulter le guide" text="Comprendre rapidement comment utiliser la plateforme." />
+              <QuickAccessCard to="/support" icon={LifeBuoy} title="Signaler un probleme" text="Créer un ticket de support si une action échoue." />
               {isTeacher && <QuickAccessCard to="/documents" icon={FilePlus2} title="Deposer un document" text="Publier un cours, TD, TP, sujet ou support." />}
             </div>
           </div>
@@ -279,6 +284,7 @@ export default function Dashboard() {
                       <strong>{item.value}</strong>
                     </Link>
                   ))}
+                  <Link className="quick-action-card" to="/systeme"><span>État du système</span><strong>Ouvrir</strong></Link>
                   <Link className="quick-action-card accent" to="/recherche">
                     <span>Recherche documentaire</span>
                     <strong>Ouvrir</strong>

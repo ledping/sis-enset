@@ -30,6 +30,8 @@ INSTALLED_APPS = [
     'apps.messagerie',
     'apps.notifications',
     'apps.premium',
+    'apps.appels',
+    'apps.exploitation',
 ]
  
 MIDDLEWARE = [

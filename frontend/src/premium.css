@@ -159,3 +159,145 @@
   background: transparent;
   cursor: pointer;
 }
+
+/* v11.1 - Offres dynamiques, promotions et pilotage institutionnel */
+.premium-announcement {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  margin: 14px 0;
+  background: linear-gradient(135deg, #eff6ff, #ffffff);
+  border: 1px solid #bfdbfe;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+.premium-announcement svg { color: #2563eb; flex-shrink: 0; margin-top: 3px; }
+.premium-announcement strong { display: block; font-size: 0.95rem; }
+.premium-announcement span { display: block; color: #475569; line-height: 1.45; }
+.premium-announcement.promo {
+  background: linear-gradient(135deg, #ecfdf5, #fff7ed);
+  border-color: #86efac;
+}
+.premium-announcement.promo svg { color: #059669; }
+.premium-plan em {
+  align-self: flex-start;
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #047857;
+  font-style: normal;
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.premium-old-price {
+  color: #ef4444 !important;
+  text-decoration: line-through;
+  font-weight: 700;
+}
+.premium-plan-admin-panel,
+.premium-promo-admin-panel {
+  margin-top: 18px;
+}
+.premium-admin-plan-list,
+.premium-promo-list {
+  display: grid;
+  gap: 14px;
+}
+.premium-admin-plan,
+.premium-promo-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 14px;
+  background: #f8fafc;
+}
+.premium-admin-plan-head,
+.premium-admin-plan-actions,
+.premium-promo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.premium-admin-plan-head {
+  margin-bottom: 10px;
+}
+.premium-admin-plan-head span {
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.premium-admin-plan label,
+.premium-promo-form label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #475569;
+  margin-bottom: 4px;
+}
+.premium-admin-plan-actions {
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.premium-promo-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.premium-promo-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.premium-promo-checks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  margin: 0;
+}
+.premium-promo-item div {
+  min-width: 0;
+}
+.premium-promo-item strong,
+.premium-promo-item span,
+.premium-promo-item small {
+  display: block;
+}
+.premium-promo-item span {
+  color: #475569;
+  line-height: 1.35;
+}
+.premium-promo-item small {
+  color: #059669;
+  font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  .premium-admin-plan-head,
+  .premium-admin-plan-actions,
+  .premium-promo-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .premium-admin-plan-actions .btn,
+  .premium-promo-item .btn,
+  .premium-promo-form .btn {
+    width: 100%;
+  }
+  .premium-promo-checks {
+    flex-direction: column;
+  }
+  .premium-promo-checks label {
+    border-radius: 14px;
+    width: 100%;
+  }
+}
