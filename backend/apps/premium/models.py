@@ -174,6 +174,24 @@ class PaiementAcces(models.Model):
         self.save(update_fields=['statut', 'valide_par', 'date_validation', 'motif_rejet'])
 
 
+class AchatDocument(models.Model):
+    utilisateur = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='achats_documents')
+    document = models.ForeignKey('documents.Document', on_delete=models.CASCADE, related_name='achats_premium')
+    credit_utilise = models.BooleanField(default=True)
+    gratuit = models.BooleanField(default=False)
+    commentaire = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('utilisateur', 'document')]
+        ordering = ['-created_at']
+        verbose_name = 'Acces document premium'
+        verbose_name_plural = 'Acces documents premium'
+
+    def __str__(self):
+        return f'{self.document} debloque par {self.utilisateur}'
+
+
 class AchatMemoire(models.Model):
     utilisateur = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='achats_memoires')
     memoire = models.ForeignKey('memoires.Memoire', on_delete=models.CASCADE, related_name='achats_premium')

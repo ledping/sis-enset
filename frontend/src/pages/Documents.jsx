@@ -3,6 +3,7 @@ import { CreditCard, Download, FilePlus2, Filter, Search, Trash2, X } from 'luci
 import api from '../api';
 import { useAuth } from '../contexts/useAuth';
 import Spinner from '../components/Spinner';
+import FilePreviewModal from '../components/FilePreviewModal';
 
 const TYPES = [
   { value: '', label: 'Tous les types' },
@@ -52,6 +53,9 @@ export default function Documents() {
   const [message, setMessage] = useState('');
   const [premiumInfo, setPremiumInfo] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [preview, setPreview] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
 
   const canUpload = ['ENSEIGNANT', 'ADMIN', 'CHEF_DEPT'].includes(user?.role);
   const isStudent = user?.role === 'ETUDIANT';
@@ -148,22 +152,75 @@ export default function Documents() {
     }
   };
 
-  const handleDownload = async (id, titre) => {
+  const openPreview = (id, titre) => {
+    setMessage('');
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview({
+      id,
+      title: titre,
+      filename: titre,
+      url: '',
+      mimeType: 'application/pdf',
+      resource: 'document',
+      locked: true,
+    });
+  };
+
+  const unlockPreview = async () => {
+    if (!preview) return;
     try {
-      const response = await api.get(`/documents/${id}/dl/`, { responseType: 'blob' });
+      setUnlocking(true);
+      setMessage('');
+      const unlockResponse = await api.post(`/documents/${preview.id}/unlock/`);
+      if (unlockResponse.data?.summary) setPremiumInfo(unlockResponse.data.summary);
+      const response = await api.get(`/documents/${preview.id}/preview/`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      setPreview((current) => ({
+        ...current,
+        url,
+        mimeType: response.headers['content-type'] || response.data?.type || 'application/pdf',
+        locked: false,
+      }));
+      setMessage(unlockResponse.data?.detail || 'Document déverrouillé. Prévisualisation complète disponible.');
+      setReloadKey((current) => current + 1);
+    } catch (error) {
+      if (error.response?.status === 402) {
+        setMessage(error.response.data?.detail || 'Crédit requis pour déverrouiller ce document.');
+      } else {
+        setMessage('Déverrouillage ou aperçu impossible. Vérifiez vos droits ou votre connexion.');
+      }
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
+  const confirmDownload = async () => {
+    if (!preview) return;
+    try {
+      setDownloading(true);
+      const response = await api.get(`/documents/${preview.id}/dl/`, { responseType: 'blob' });
       const url = URL.createObjectURL(response.data);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = titre;
+      anchor.download = preview.filename || preview.title || 'document';
       anchor.click();
       URL.revokeObjectURL(url);
+      closePreview();
       setReloadKey((current) => current + 1);
+      setMessage('Téléchargement lancé après aperçu.');
     } catch (error) {
       if (error.response?.status === 402) {
         setMessage(error.response.data?.detail || 'Accès premium requis pour poursuivre les téléchargements.');
       } else {
         setMessage('Téléchargement impossible. Vérifiez vos droits ou votre connexion.');
       }
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -280,7 +337,7 @@ export default function Documents() {
                   {doc.description && <p className="text-muted small mt-3 mb-0">{doc.description}</p>}
                 </div>
                 <div className="card-footer bg-transparent border-0 d-flex align-items-center gap-2 px-3 pb-3 resource-card-footer">
-                  <button className="btn btn-sm btn-outline-primary" onClick={() => handleDownload(doc.id, doc.titre)}><Download size={15} /> Télécharger</button>
+                  <button className="btn btn-sm btn-outline-primary" onClick={() => openPreview(doc.id, doc.titre)}><Download size={15} /> Télécharger</button>
                   {canDelete(doc) && (
                     <button className="btn btn-sm btn-outline-danger" type="button" onClick={() => void handleDelete(doc)}>
                       <Trash2 size={15} /> Supprimer
@@ -319,6 +376,7 @@ export default function Documents() {
           </div>
         </div>
       )}
+      <FilePreviewModal preview={preview} downloading={downloading} unlocking={unlocking} onClose={closePreview} onUnlock={unlockPreview} onDownload={confirmDownload} />
     </div>
   );
 }

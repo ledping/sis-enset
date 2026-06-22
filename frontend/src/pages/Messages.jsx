@@ -1124,6 +1124,35 @@ export default function Messages() {
     return undefined;
   };
 
+  const processGlobalCallPayload = async (payload) => {
+    if (!payload) return;
+    const signal = payload.signal || payload;
+    const autoAccept = Boolean(payload.autoAccept);
+    await processCallSignal(signal);
+    if (autoAccept && signal.type_signal === 'incoming') {
+      window.setTimeout(() => { void acceptIncomingCall(); }, 220);
+    }
+  };
+
+  useEffect(() => {
+    const handleGlobalSignal = (event) => {
+      if (event.detail) void processGlobalCallPayload(event.detail);
+    };
+    window.addEventListener('sis:call-signal', handleGlobalSignal);
+    try {
+      const raw = sessionStorage.getItem('sis_pending_call_signal');
+      if (raw) {
+        const payload = JSON.parse(raw);
+        sessionStorage.removeItem('sis_pending_call_signal');
+        window.setTimeout(() => { void processGlobalCallPayload(payload); }, 180);
+      }
+    } catch {
+      sessionStorage.removeItem('sis_pending_call_signal');
+    }
+    return () => window.removeEventListener('sis:call-signal', handleGlobalSignal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {

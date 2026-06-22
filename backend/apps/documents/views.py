@@ -1,4 +1,5 @@
 from django.db.models import Q
+import mimetypes
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import filters, generics, permissions, status
@@ -10,7 +11,7 @@ from .serializers import DocumentSerializer
 from apps.journal.models import JournalActivite, log
 from apps.users.models import ParametresValidation, Utilisateur
 from apps.notifications.models import Notification, notifier
-from apps.premium.services import PremiumAccessDenied, grant_document_download
+from apps.premium.services import PremiumAccessDenied, can_preview_document_download, grant_document_access, grant_document_download, premium_summary
 
 
 class CanValidateDocument(permissions.BasePermission):
@@ -145,7 +146,56 @@ class DocumentValidationView(APIView):
         return Response(DocumentSerializer(doc, context={'request': request}).data)
 
 
+class DocumentUnlockView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        doc = get_object_or_404(Document, pk=pk)
+        if doc.statut != Document.Statut.VALIDE and request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
+            return Response({'detail': 'Document non valide.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            decision = grant_document_access(request.user, doc)
+        except PremiumAccessDenied as exc:
+            return Response({
+                'detail': exc.detail,
+                'code': exc.code,
+                'redirect': '/premium',
+            }, status=402)
+        log(request.user, JournalActivite.TypeAction.CONSULTATION, f'Deblocage document premium : {doc.titre}', request.META.get('REMOTE_ADDR'))
+        return Response({
+            'detail': decision.reason or 'Document debloque.',
+            'unlocked': True,
+            'summary': premium_summary(request.user),
+        })
+
+
+class DocumentPreviewView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        doc = get_object_or_404(Document, pk=pk)
+        if doc.statut != Document.Statut.VALIDE and request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
+            return Response({'detail': 'Document non valide.'}, status=status.HTTP_403_FORBIDDEN)
+        if not doc.fichier:
+            return Response({'detail': 'Fichier introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            can_preview_document_download(request.user, doc)
+        except PremiumAccessDenied as exc:
+            return Response({
+                'detail': exc.detail,
+                'code': exc.code,
+                'redirect': '/premium',
+            }, status=402)
+
+        filename = doc.fichier.name.split('/')[-1]
+        content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+        log(request.user, JournalActivite.TypeAction.CONSULTATION, f'Apercu avant telechargement : {doc.titre}', request.META.get('REMOTE_ADDR'))
+        return FileResponse(doc.fichier.open('rb'), as_attachment=False, filename=filename, content_type=content_type)
+
+
 class DocumentDownloadView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
     def get(self, request, pk):
         doc = get_object_or_404(Document, pk=pk)
         if doc.statut != Document.Statut.VALIDE and request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:

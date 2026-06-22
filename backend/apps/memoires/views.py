@@ -1,4 +1,5 @@
 from django.db.models import Q
+import mimetypes
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import filters, generics, permissions, status
@@ -11,7 +12,7 @@ from .serializers import MemoireSerializer
 from apps.journal.models import JournalActivite, log
 from apps.users.models import ParametresValidation, Utilisateur
 from apps.notifications.models import Notification, notifier
-from apps.premium.services import PremiumAccessDenied, grant_memoire_download
+from apps.premium.services import PremiumAccessDenied, can_preview_memoire_download, grant_memoire_access, grant_memoire_download, premium_summary
 
 
 class CanValidateMemoire(permissions.BasePermission):
@@ -137,7 +138,56 @@ class MemoireValidationView(APIView):
         return Response(MemoireSerializer(memoire, context={'request': request}).data)
 
 
+class MemoireUnlockView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        memoire = get_object_or_404(Memoire, pk=pk)
+        if memoire.statut != Memoire.Statut.VALIDE and request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
+            return Response({'detail': 'Memoire non archive.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            decision = grant_memoire_access(request.user, memoire)
+        except PremiumAccessDenied as exc:
+            return Response({
+                'detail': exc.detail,
+                'code': exc.code,
+                'redirect': '/premium',
+            }, status=402)
+        log(request.user, JournalActivite.TypeAction.CONSULTATION, f'Deblocage memoire premium : {memoire.titre}', request.META.get('REMOTE_ADDR'))
+        return Response({
+            'detail': decision.reason or 'Memoire debloque.',
+            'unlocked': True,
+            'summary': premium_summary(request.user),
+        })
+
+
+class MemoirePreviewView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        memoire = get_object_or_404(Memoire, pk=pk)
+        if memoire.statut != Memoire.Statut.VALIDE and request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:
+            return Response({'detail': 'Memoire non archive.'}, status=status.HTTP_403_FORBIDDEN)
+        if not memoire.fichier_pdf:
+            return Response({'detail': 'Fichier PDF introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            can_preview_memoire_download(request.user, memoire)
+        except PremiumAccessDenied as exc:
+            return Response({
+                'detail': exc.detail,
+                'code': exc.code,
+                'redirect': '/premium',
+            }, status=402)
+
+        filename = memoire.fichier_pdf.name.split('/')[-1]
+        content_type = mimetypes.guess_type(filename)[0] or 'application/pdf'
+        log(request.user, JournalActivite.TypeAction.CONSULTATION, f'Apercu avant telechargement memoire : {memoire.titre}', request.META.get('REMOTE_ADDR'))
+        return FileResponse(memoire.fichier_pdf.open('rb'), as_attachment=False, filename=filename, content_type=content_type)
+
+
 class MemoireDownloadView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
     def get(self, request, pk):
         memoire = get_object_or_404(Memoire, pk=pk)
         if memoire.statut != Memoire.Statut.VALIDE and request.user.role not in [Utilisateur.Role.ADMIN, Utilisateur.Role.CHEF_DEPT]:

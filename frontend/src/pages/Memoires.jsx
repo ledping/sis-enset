@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../contexts/useAuth';
 import Spinner from '../components/Spinner';
+import FilePreviewModal from '../components/FilePreviewModal';
 
 const emptyTool = { categorie: '', nom: '', version: '', description: '' };
 
@@ -46,6 +47,9 @@ export default function Memoires() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [reloadKey, setReloadKey] = useState(0);
+  const [preview, setPreview] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
 
   const canSubmit = ['ENSEIGNANT', 'ADMIN', 'CHEF_DEPT'].includes(user?.role);
   const canDelete = (memoire) => ['ADMIN', 'CHEF_DEPT'].includes(user?.role) || memoire.depose_par_id === user?.id || memoire.depose_par_detail?.id === user?.id;
@@ -147,22 +151,72 @@ export default function Memoires() {
     }
   };
 
-  const handleDownload = async (id, titre) => {
+  const openPreview = (id, titre) => {
+    setMessage('');
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview({
+      id,
+      title: titre,
+      filename: `${titre}.pdf`,
+      url: '',
+      mimeType: 'application/pdf',
+      resource: 'memoire',
+      locked: true,
+    });
+  };
+
+  const unlockPreview = async () => {
+    if (!preview) return;
     try {
-      const response = await api.get(`/memoires/${id}/dl/`, { responseType: 'blob' });
+      setUnlocking(true);
+      setMessage('');
+      const unlockResponse = await api.post(`/memoires/${preview.id}/unlock/`);
+      const response = await api.get(`/memoires/${preview.id}/preview/`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      setPreview((current) => ({
+        ...current,
+        url,
+        mimeType: response.headers['content-type'] || response.data?.type || 'application/pdf',
+        locked: false,
+      }));
+      setMessage(unlockResponse.data?.detail || 'Mémoire déverrouillé. Prévisualisation complète disponible.');
+    } catch (error) {
+      if (error.response?.status === 402) {
+        setMessage(error.response.data?.detail || 'Crédit mémoire requis pour déverrouiller ce document.');
+      } else {
+        setMessage('Déverrouillage ou aperçu du mémoire impossible.');
+      }
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
+  const confirmDownload = async () => {
+    if (!preview) return;
+    try {
+      setDownloading(true);
+      const response = await api.get(`/memoires/${preview.id}/dl/`, { responseType: 'blob' });
       const url = URL.createObjectURL(response.data);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${titre}.pdf`;
+      anchor.download = preview.filename || `${preview.title}.pdf`;
       anchor.click();
       URL.revokeObjectURL(url);
-      setMessage('Téléchargement lancé.');
+      closePreview();
+      setMessage('Téléchargement lancé après aperçu.');
     } catch (error) {
       if (error.response?.status === 402) {
         setMessage(error.response.data?.detail || 'Crédit mémoire requis. Ouvrez Accès premium pour acheter un pack mémoire.');
       } else {
         setMessage('Téléchargement impossible.');
       }
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -253,7 +307,7 @@ export default function Memoires() {
                       <Eye size={15} /> Article
                     </Link>
                     {memoire.fichier_pdf && (
-                      <button className="btn btn-primary btn-sm" type="button" onClick={() => void handleDownload(memoire.id, memoire.titre)}>
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => void openPreview(memoire.id, memoire.titre)}>
                         <Download size={15} /> Débloquer PDF
                       </button>
                     )}
@@ -417,6 +471,7 @@ export default function Memoires() {
           </div>
         </div>
       )}
+      <FilePreviewModal preview={preview} downloading={downloading} unlocking={unlocking} onClose={closePreview} onUnlock={unlockPreview} onDownload={confirmDownload} />
     </div>
   );
 }

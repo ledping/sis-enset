@@ -4,6 +4,7 @@ import { ArrowLeft, BookOpen, CreditCard, Download, FileText, Lock, Mail, Phone,
 import api, { API_BASE_URL } from '../api';
 import { useAuth } from '../contexts/useAuth';
 import Spinner from '../components/Spinner';
+import FilePreviewModal from '../components/FilePreviewModal';
 
 function fileUrl(path) {
   if (!path) return '';
@@ -46,6 +47,9 @@ export default function MemoireDetail() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [premiumInfo, setPremiumInfo] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -87,23 +91,76 @@ export default function MemoireDetail() {
 
   const canDelete = (item) => ['ADMIN', 'CHEF_DEPT'].includes(user?.role) || item?.depose_par_id === user?.id || item?.depose_par_detail?.id === user?.id;
 
-  const download = async () => {
+  const openPreview = () => {
+    if (!memoire) return;
+    setMessage('');
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview({
+      id,
+      title: memoire.titre,
+      filename: `${memoire.titre}.pdf`,
+      url: '',
+      mimeType: 'application/pdf',
+      resource: 'memoire',
+      locked: true,
+    });
+  };
+
+  const unlockPreview = async () => {
+    if (!preview) return;
     try {
+      setUnlocking(true);
+      setMessage('');
+      const unlockResponse = await api.post(`/memoires/${id}/unlock/`);
+      if (unlockResponse.data?.summary) setPremiumInfo(unlockResponse.data.summary);
+      const response = await api.get(`/memoires/${id}/preview/`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      setPreview((current) => ({
+        ...current,
+        url,
+        mimeType: response.headers['content-type'] || response.data?.type || 'application/pdf',
+        locked: false,
+      }));
+      setMessage(unlockResponse.data?.detail || 'Mémoire déverrouillé. Prévisualisation complète disponible.');
+    } catch (error) {
+      if (error.response?.status === 402) {
+        setMessage(error.response.data?.detail || 'Crédit mémoire requis pour déverrouiller ce document.');
+      } else {
+        setMessage('Déverrouillage ou aperçu du mémoire impossible.');
+      }
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
+  const confirmDownload = async () => {
+    if (!preview) return;
+    try {
+      setDownloading(true);
       const response = await api.get(`/memoires/${id}/dl/`, { responseType: 'blob' });
       const url = URL.createObjectURL(response.data);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${memoire.titre}.pdf`;
+      anchor.download = preview.filename || `${memoire.titre}.pdf`;
       anchor.click();
       URL.revokeObjectURL(url);
+      closePreview();
       const info = await api.get('/premium/me/');
       setPremiumInfo(info.data.summary);
+      setMessage('Téléchargement lancé après aperçu.');
     } catch (error) {
       if (error.response?.status === 402) {
         setMessage(error.response.data?.detail || 'Crédit mémoire requis pour télécharger le document complet.');
       } else {
         setMessage('Téléchargement impossible.');
       }
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -143,7 +200,7 @@ export default function MemoireDetail() {
           <p>Présentation institutionnelle du mémoire, générée à partir des informations saisies.</p>
         </div>
         <div className="d-flex flex-wrap gap-2">
-          <button className="btn btn-primary" type="button" onClick={() => void download()}>
+          <button className="btn btn-primary" type="button" onClick={() => void openPreview()}>
             <Download size={17} /> Télécharger le mémoire
           </button>
           {canDelete(memoire) && (
@@ -293,7 +350,7 @@ export default function MemoireDetail() {
             <div className="card-body d-flex flex-wrap gap-2">
               {resources.map((item) => (
                 item.primary ? (
-                  <button key={item.label} type="button" className="btn btn-primary" onClick={() => void download()}>
+                  <button key={item.label} type="button" className="btn btn-primary" onClick={() => void openPreview()}>
                     <Lock size={16} /> {item.label}
                   </button>
                 ) : (
@@ -318,6 +375,7 @@ export default function MemoireDetail() {
           </div>
         )}
       </div>
+      <FilePreviewModal preview={preview} downloading={downloading} unlocking={unlocking} onClose={closePreview} onUnlock={unlockPreview} onDownload={confirmDownload} />
     </div>
   );
 }

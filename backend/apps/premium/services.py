@@ -3,7 +3,7 @@ from django.db import transaction
 from django.db.models import Count, Sum
 from django.utils import timezone
 from apps.users.models import Utilisateur
-from .models import AchatMemoire, HistoriqueTelechargement, ParametresPremium, PortefeuilleUtilisateur, PromotionPremium
+from .models import AchatDocument, AchatMemoire, HistoriqueTelechargement, ParametresPremium, PortefeuilleUtilisateur, PromotionPremium
 
 PRIX_MEMOIRE_DEFAUT = 500
 POURCENTAGE_AUTEUR_DEFAUT = 30
@@ -95,10 +95,39 @@ def premium_summary(user):
     }
 
 
+def user_has_document_access(user, document):
+    if is_privileged(user):
+        return True
+    if premium_rules()['documents_gratuits_promo']:
+        return True
+    return AchatDocument.objects.filter(utilisateur=user, document=document).exists()
+
+
+def user_has_memoire_access(user, memoire):
+    if is_privileged(user):
+        return True
+    if premium_rules()['memoires_gratuits_promo']:
+        return True
+    return AchatMemoire.objects.filter(utilisateur=user, memoire=memoire).exists()
+
+
+def can_preview_document_download(user, document):
+    if user_has_document_access(user, document):
+        return PremiumDecision(True, 'Document deja debloque')
+    raise PremiumAccessDenied('Apercu complet verrouille. Utilisez 1 credit pour debloquer la consultation complete et le telechargement.', 'document_unlock_required')
+
+
+def can_preview_memoire_download(user, memoire):
+    if user_has_memoire_access(user, memoire):
+        return PremiumDecision(True, 'Memoire deja debloque')
+    raise PremiumAccessDenied('Apercu complet verrouille. Utilisez 1 credit memoire pour consulter le fichier complet et le telecharger.', 'memoire_unlock_required')
+
+
 @transaction.atomic
 def grant_document_download(user, document):
     rules = premium_rules()
     promo = rules['promotion']
+
     if is_privileged(user):
         HistoriqueTelechargement.objects.create(
             utilisateur=user,
@@ -109,7 +138,26 @@ def grant_document_download(user, document):
         )
         return PremiumDecision(True, 'Acces institutionnel')
 
+    existing = AchatDocument.objects.filter(utilisateur=user, document=document).first()
+    if existing:
+        HistoriqueTelechargement.objects.create(
+            utilisateur=user,
+            type_ressource=HistoriqueTelechargement.TypeRessource.DOCUMENT,
+            document=document,
+            gratuit=existing.gratuit,
+            via_credit=existing.credit_utilise,
+            commentaire='Document deja debloque',
+        )
+        return PremiumDecision(True, 'Document deja debloque')
+
     if rules['documents_gratuits_promo']:
+        AchatDocument.objects.create(
+            utilisateur=user,
+            document=document,
+            gratuit=True,
+            credit_utilise=False,
+            commentaire=f'Promotion active : {promo.titre}',
+        )
         HistoriqueTelechargement.objects.create(
             utilisateur=user,
             type_ressource=HistoriqueTelechargement.TypeRessource.DOCUMENT,
@@ -122,6 +170,13 @@ def grant_document_download(user, document):
     used = free_document_downloads_used(user)
     quota = rules['quota_documents']
     if used < quota:
+        AchatDocument.objects.create(
+            utilisateur=user,
+            document=document,
+            gratuit=True,
+            credit_utilise=False,
+            commentaire='Quota gratuit mensuel',
+        )
         HistoriqueTelechargement.objects.create(
             utilisateur=user,
             type_ressource=HistoriqueTelechargement.TypeRessource.DOCUMENT,
@@ -135,16 +190,31 @@ def grant_document_download(user, document):
     if wallet.telechargements_documents_credits > 0:
         wallet.telechargements_documents_credits -= 1
         wallet.save(update_fields=['telechargements_documents_credits', 'updated_at'])
+        AchatDocument.objects.create(
+            utilisateur=user,
+            document=document,
+            gratuit=False,
+            credit_utilise=True,
+            commentaire='Credit document utilise',
+        )
         HistoriqueTelechargement.objects.create(
             utilisateur=user,
             type_ressource=HistoriqueTelechargement.TypeRessource.DOCUMENT,
             document=document,
             via_credit=True,
-            commentaire='Credit document utilise',
+            commentaire='Credit document utilise - acces complet debloque',
         )
         return PremiumDecision(True, 'Credit document utilise')
 
-    raise PremiumAccessDenied(f'Vous avez atteint votre limite gratuite de {quota} documents ce mois-ci. Achetez un pack document pour debloquer des telechargements supplementaires.', 'document_credit_required')
+    raise PremiumAccessDenied(f'Vous avez atteint votre limite gratuite de {quota} documents ce mois-ci. Achetez un pack document pour debloquer des documents supplementaires.', 'document_credit_required')
+
+
+def grant_document_access(user, document):
+    return grant_document_download(user, document)
+
+
+def grant_memoire_access(user, memoire):
+    return grant_memoire_download(user, memoire)
 
 
 @transaction.atomic

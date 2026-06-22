@@ -3,6 +3,7 @@ import { BookOpen, Download, Eye, FileText, Search, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../api';
 import Spinner from '../components/Spinner';
+import FilePreviewModal from '../components/FilePreviewModal';
 
 const TYPES = [
   { value: '', label: 'Tous les types' },
@@ -39,6 +40,9 @@ export default function Recherche() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
 
   const params = useMemo(() => {
     const next = {};
@@ -82,23 +86,76 @@ export default function Recherche() {
     setFiliereFilter('');
   };
 
-  const download = async (url, filename, premiumLabel) => {
+  const openPreview = ({ id, kind, title, filename, premiumLabel }) => {
     setMessage('');
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview({
+      id,
+      kind,
+      title,
+      filename,
+      premiumLabel,
+      url: '',
+      mimeType: filename?.toLowerCase().endsWith('.pdf') || kind === 'memoire' ? 'application/pdf' : '',
+      locked: true,
+    });
+  };
+
+  const unlockPreview = async () => {
+    if (!preview) return;
+    const unlockUrl = preview.kind === 'document' ? `/documents/${preview.id}/unlock/` : `/memoires/${preview.id}/unlock/`;
+    const previewUrl = preview.kind === 'document' ? `/documents/${preview.id}/preview/` : `/memoires/${preview.id}/preview/`;
     try {
-      const response = await api.get(url, { responseType: 'blob' });
+      setUnlocking(true);
+      setMessage('');
+      const unlockResponse = await api.post(unlockUrl);
+      const response = await api.get(previewUrl, { responseType: 'blob' });
+      const objectUrl = URL.createObjectURL(response.data);
+      setPreview((current) => ({
+        ...current,
+        url: objectUrl,
+        mimeType: response.headers['content-type'] || response.data?.type || current?.mimeType || 'application/pdf',
+        locked: false,
+      }));
+      setMessage(unlockResponse.data?.detail || 'Fichier déverrouillé. Prévisualisation complète disponible.');
+    } catch (downloadError) {
+      if (downloadError.response?.status === 402) {
+        setMessage(downloadError.response.data?.detail || `${preview.premiumLabel} : crédit premium requis. Ouvrez Accès premium pour acheter un pack.`);
+      } else {
+        setMessage('Déverrouillage ou aperçu impossible pour le moment.');
+      }
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
+  const confirmDownload = async () => {
+    if (!preview) return;
+    const downloadUrl = preview.kind === 'document' ? `/documents/${preview.id}/dl/` : `/memoires/${preview.id}/dl/`;
+    try {
+      setDownloading(true);
+      const response = await api.get(downloadUrl, { responseType: 'blob' });
       const objectUrl = URL.createObjectURL(response.data);
       const anchor = document.createElement('a');
       anchor.href = objectUrl;
-      anchor.download = filename;
+      anchor.download = preview.filename;
       anchor.click();
       URL.revokeObjectURL(objectUrl);
-      setMessage('Téléchargement lancé.');
+      closePreview();
+      setMessage('Téléchargement lancé après aperçu.');
     } catch (downloadError) {
       if (downloadError.response?.status === 402) {
-        setMessage(downloadError.response.data?.detail || `${premiumLabel} : crédit premium requis. Ouvrez Accès premium pour acheter un pack.`);
+        setMessage(downloadError.response.data?.detail || `${preview.premiumLabel} : crédit premium requis. Ouvrez Accès premium pour acheter un pack.`);
       } else {
         setMessage('Téléchargement impossible pour le moment.');
       }
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -161,7 +218,7 @@ export default function Recherche() {
                     <span>{doc.type_doc} · {doc.filiere || 'Filière non précisée'} · Niveau {doc.niveau || '-'}</span>
                     <p>{doc.description?.slice(0, 140) || 'Document pédagogique validé.'}</p>
                   </div>
-                  <button className="btn btn-sm btn-outline-primary" type="button" onClick={() => void download(`/documents/${doc.id}/dl/`, doc.titre, 'Document')}><Download size={14} /> Télécharger</button>
+                  <button className="btn btn-sm btn-outline-primary" type="button" onClick={() => void openPreview({ id: doc.id, kind: 'document', title: doc.titre, filename: doc.titre, premiumLabel: 'Document' })}><Download size={14} /> Télécharger</button>
                 </article>
               ))}
               {documents.length === 0 && <div className="empty-state m-3">Aucun document trouvé.</div>}
@@ -181,7 +238,7 @@ export default function Recherche() {
                   </div>
                   <div className="search-result-actions">
                     <Link className="btn btn-sm btn-outline-primary" to={`/memoires/${memoire.id}`}><Eye size={14} /> Article</Link>
-                    <button className="btn btn-sm btn-primary" type="button" onClick={() => void download(`/memoires/${memoire.id}/dl/`, `${memoire.titre}.pdf`, 'Mémoire complet')}><Download size={14} /> PDF</button>
+                    <button className="btn btn-sm btn-primary" type="button" onClick={() => void openPreview({ id: memoire.id, kind: 'memoire', title: memoire.titre, filename: `${memoire.titre}.pdf`, premiumLabel: 'Mémoire complet' })}><Download size={14} /> PDF</button>
                   </div>
                 </article>
               ))}
@@ -190,6 +247,7 @@ export default function Recherche() {
           </section>
         </div>
       )}
+      <FilePreviewModal preview={preview} downloading={downloading} unlocking={unlocking} onClose={closePreview} onUnlock={unlockPreview} onDownload={confirmDownload} />
     </div>
   );
 }

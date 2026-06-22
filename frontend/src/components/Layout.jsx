@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { BarChart3, Bell, BookOpen, CheckSquare, CreditCard, FileSearch, FileText, HelpCircle, LifeBuoy, LogOut, Menu, MessageSquareText, Network, Server, ShieldCheck, UserCog, UserRound, X } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
 import api from '../api';
+import GlobalRealtimeCenter from './GlobalRealtimeCenter';
 
 function getRoleLabel(role) {
   return {
@@ -175,6 +176,7 @@ export default function Layout() {
         <main className="content-area">
           <Outlet />
         </main>
+        <GlobalRealtimeCenter />
       </div>
     </div>
   );

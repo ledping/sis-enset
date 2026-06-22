@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    AchatDocument,
     AchatMemoire,
     AuditPremium,
     HistoriqueTelechargement,
@@ -80,6 +81,14 @@ class PaiementAccesAdmin(admin.ModelAdmin):
     list_filter = ('statut', 'moyen', 'plan')
     search_fields = ('utilisateur__username', 'reference', 'numero_payeur')
     readonly_fields = ('created_at', 'date_validation')
+
+
+@admin.register(AchatDocument)
+class AchatDocumentAdmin(admin.ModelAdmin):
+    list_display = ('document', 'utilisateur', 'gratuit', 'credit_utilise', 'created_at')
+    list_filter = ('gratuit', 'credit_utilise')
+    search_fields = ('document__titre', 'utilisateur__username')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(AchatMemoire)
